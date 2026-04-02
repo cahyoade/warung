@@ -19,7 +19,8 @@ export default function RootLayout() {
       <SQLiteProvider databaseName="warung.db" onInit={migrateDbIfNeeded} useSuspense>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="add-product" options={{ presentation: 'modal', title: 'Add Product' }} />
+          <Stack.Screen name="add-customer" options={{ presentation: 'modal', title: 'Add Customer' }} />
         </Stack>
         <StatusBar style="auto" />
       </SQLiteProvider>
