@@ -20,6 +20,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'list.bullet': 'inventory',
   'person.2.fill': 'people',
+  'chart.bar.fill': 'bar-chart',
 } as IconMapping;
 
 /**
