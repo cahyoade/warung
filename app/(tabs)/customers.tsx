@@ -1,8 +1,8 @@
 import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 type Customer = { id: number, name: string, phone: string, totalDebt: number, accumulatedPoints: number };
 
@@ -24,9 +24,11 @@ export default function CustomersScreen() {
     setCustomers(result);
   }
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchCustomers();
+    }, [])
+  );
 
   return (
     <View style={styles.container}>

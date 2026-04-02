@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { PrinterService } from '../../src/utils/PrinterService';
+import { BLEPrinter } from 'react-native-thermal-receipt-printer';
 
 export default function SettingsScreen() {
   const handleTestPrint = () => {
@@ -13,10 +14,22 @@ export default function SettingsScreen() {
         pointsEarned: 0,
         totalPointsBalance: 45
     });
-    Alert.alert(
-      'Test Print Fired', 
-      'Sent string data to Native Bluetooth Module! (Check device logs)'
-    );
+    Alert.alert('Test Initiated', 'Check printer.');
+  };
+
+  const connectPrinter = async () => {
+    try {
+      await BLEPrinter.init();
+      const devices = await BLEPrinter.getDeviceList();
+      if (devices.length > 0) {
+         await BLEPrinter.connectPrinter(devices[0].inner_mac_address);
+         Alert.alert('Success', `Connected to ${devices[0].device_name}`);
+      } else {
+         Alert.alert('No Devices', 'Try pairing in Android settings first.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to connect. Are you on a physical device with a dev client?');
+    }
   };
 
   const handleSync = async () => {
@@ -37,7 +50,10 @@ export default function SettingsScreen() {
       
       <View style={styles.card}>
          <Text style={styles.cardTitle}>Bluetooth Printer</Text>
-         <Text style={styles.cardDesc}>Connection requires Android APK compilation. Pair your printer in Android Settings, then click test print.</Text>
+         <Text style={styles.cardDesc}>Pair your printer in Android Settings, then connect to it here before trying to test print.</Text>
+         <TouchableOpacity style={[styles.btnHardware, {backgroundColor: '#eab308'}]} onPress={connectPrinter}>
+             <Text style={styles.btnHardwareText}>Connect to Default Printer</Text>
+         </TouchableOpacity>
          <TouchableOpacity style={styles.btnHardware} onPress={handleTestPrint}>
              <Text style={styles.btnHardwareText}>Test Receipt Print</Text>
          </TouchableOpacity>

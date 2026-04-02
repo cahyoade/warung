@@ -1,8 +1,8 @@
 import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 type Product = { id: number, name: string, stockCount: number, basePrice: number, unitOfMeasure: string };
 
@@ -16,9 +16,11 @@ export default function InventoryScreen() {
     setProducts(result);
   }
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [])
+  );
 
   return (
     <View style={styles.container}>

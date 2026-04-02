@@ -1,3 +1,6 @@
+import { BLEPrinter } from 'react-native-thermal-receipt-printer';
+import { Alert } from 'react-native';
+
 export type ReceiptData = {
     transactionId: number;
     items: {name: string, qty: number, subtotal: number}[];
@@ -49,10 +52,16 @@ export class PrinterService {
     static async printReceipt(data: ReceiptData) {
         const rawEscPosString = this.buildReceiptFormat(data);
         console.log("SENDING TO BLUETOOTH PRINTER:");
-        console.log(rawEscPosString);
         
-        // NOTE FOR USER: This is the exact injection point for the native Library
-        // Depending on whether we use react-native-bluetooth-escpos-printer or similar, 
-        // you pass the rawEscPosString to the device.
+        try {
+            // Initialize the module and print if a device was connected via Settings screen
+            await BLEPrinter.init();
+            
+            // You can print raw strings by using printBill
+            BLEPrinter.printBill(rawEscPosString, { beep: false, cut: false });
+        } catch(e) {
+            console.error(e);
+            Alert.alert('Printer Error', 'Failed to communicate with printer. Ensure it is connected in settings.');
+        }
     }
 }
