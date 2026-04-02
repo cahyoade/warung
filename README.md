@@ -1,50 +1,75 @@
-# Welcome to your Expo app 👋
+# Warung POS 🏪
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An offline-first, high-performance Point of Sale (POS) system built with React Native (Expo) and SQLite. Designed specifically for small convenience stores (Warungs) running entirely on local Android devices with zero recurring server costs.
 
-## Get started
+## Features
+- **Offline-First**: Powered entirely by a local `expo-sqlite` database. No internet required to check out customers or track inventory.
+- **Dynamic Wholesale Pricing**: Setup pricing tiers (e.g., 1 pc = Rp 3000, 5 pcs = Rp 2500). The cart automatically reduces the subtotal as quantities increase.
+- **Kasbon (Debt) Tracking**: Check out customers using "Pay Later". The system automatically aggregates unpaid debts and flags them next to the customer's name.
+- **Profit Analytics**: Accurately tracks Historical Net Profit. Cost prices are locked in at the exact time of the transaction, ensuring fluctuating distributor prices don't ruin your reports.
+- **Loyalty Program**: Auto-calculates points (e.g. 1 point for every Rp 10,000 spent).
+- **Google Sheets Backup**: Raw REST algorithm to export your local SQLite data directly to your personal Google Drive (Zero-infrastructure).
+- **Thermal Printer Ready**: ESC/POS syntax builder ready to plug-and-play with Native Bluetooth Drivers.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🚀 How to Setup & Run
 
-2. Start the app
+### Prerequisites
+1. Install [Node.js](https://nodejs.org/en) (LTS version recommended)
+2. Install the Expo CLI globally: `npm install -g eas-cli`
+3. Download the **Expo Go** app on your physical Android phone (available on Google Play Store).
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+### 1. Installation
+Clone the repository and install all dependencies:
 ```bash
-npm run reset-project
+# Navigate into the project folder
+cd warung
+
+# Install node modules
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Running Locally (Development)
+Because the current app uses standard Expo SDK modules (including `expo-sqlite` which works natively in Expo Go starting SDK 50+), you can immediately test the app on your phone without Android Studio!
 
-## Learn more
+```bash
+# Start the Expo Bundler
+npx expo start
+```
+* A QR Code will appear in your terminal.
+* Open the **Expo Go** app on your phone and scan the QR code.
+* The app will instantly load and hot-reload as you make changes to the code.
 
-To learn more about developing your project with Expo, look at the following resources:
+### 3. Building the Final APK (Production)
+When you are ready to permanently install the app on your store's tablet or phone (or if you install Custom Native Bluetooth plugins), you must compile it into a standalone `.apk`.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+# Log into Expo Application Services (Free)
+eas login
 
-## Join the community
+# Build the Android APK in the cloud
+eas build -p android --profile preview
+```
+Once the build finishes, Expo will give you a link to download the `.apk` file. Transfer it to your Android device and install it!
 
-Join our community of developers creating universal apps.
+---
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🛠 Advanced Features Setup
+
+### Google Sheets Cloud Backup (Phase 6)
+To activate the cloud backup without paying for a server:
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a New Project.
+3. Search for "Google Sheets API" and **Enable** it.
+4. Go to **Credentials** -> Create **OAuth Client ID** (Type: Web Application).
+5. Pass this credential into a Google Sign-In package (like `@react-native-google-signin/google-signin` or `expo-auth-session`) to obtain an `AccessToken`.
+6. Pass the `AccessToken` to `SyncService.syncTransactionsToGoogleDrive()` to instantly push your database to your personal Google Drive!
+
+### Bluetooth Thermal Printing (Phase 5)
+The receipt format logic is encapsulated in `src/utils/PrinterService.ts`. 
+To actually pipe this data to your hardware:
+1. Pair your Android device with the 58mm/80mm thermal printer in standard Android Bluetooth Settings.
+2. Install a Native library (e.g., `react-native-thermal-receipt-printer`).
+3. Pass the generated string from `PrinterService.buildReceiptFormat()` directly to the printer's write command. 
+*(Note: Installing native Bluetooth libraries requires moving away from Expo Go and using an Expo Custom Dev Client `./android` folder).*
