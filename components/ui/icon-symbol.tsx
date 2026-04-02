@@ -21,6 +21,7 @@ const MAPPING = {
   'list.bullet': 'inventory',
   'person.2.fill': 'people',
   'chart.bar.fill': 'bar-chart',
+  'gearshape.fill': 'settings',
 } as IconMapping;
 
 /**

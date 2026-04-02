@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { PrinterService } from '../src/utils/PrinterService';
 
 type Customer = { id: number, name: string };
 type CartItem = { id: number, name: string, activeUnitPrice: number, costPrice: number, cartQty: number };
@@ -73,6 +74,15 @@ export default function CheckoutScreen() {
           [pointsAwarded, selectedCustomerId]
         );
       }
+
+      PrinterService.printReceipt({
+         transactionId: transactionId,
+         items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
+         total: totalAmount,
+         cashGiven: actualCash,
+         customerName: customers.find(c => c.id === selectedCustomerId)?.name,
+         pointsEarned: pointsAwarded
+      });
 
       Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}`, [
         { text: 'OK', onPress: () => router.replace('/(tabs)') }
