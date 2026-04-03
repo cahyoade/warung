@@ -5,9 +5,8 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
   let result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = result?.user_version || 0;
 
-  if (currentDbVersion >= DATABASE_VERSION) {
-    return;
-  }
+  // We will check for dummy data seeding before returning if already up to date
+  let isUpToDate = currentDbVersion >= DATABASE_VERSION;
 
   if (currentDbVersion === 0) {
     // Initial schema
@@ -78,4 +77,45 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
   }
   
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+
+  if (__DEV__) {
+    try {
+      console.log('Development environment detected. Wiping database clean...');
+      await db.execAsync(`
+        DELETE FROM TransactionPayment;
+        DELETE FROM TransactionItem;
+        DELETE FROM "Transaction";
+        DELETE FROM ProductPriceTier;
+        DELETE FROM Product;
+        DELETE FROM Customer;
+
+        -- Reset auto-increment counters
+        DELETE FROM sqlite_sequence WHERE name IN ('Product', 'Customer', '"Transaction"', 'TransactionItem', 'TransactionPayment', 'ProductPriceTier');
+      `);
+
+      console.log('Seeding fresh dummy data...');
+      await db.execAsync(`
+        INSERT INTO Product (name, category, barcode, basePrice, costPrice, unitOfMeasure, stockCount) VALUES
+        ('Indomie Goreng', 'Food', '89686660011', 3000, 2500, 'pcs', 100),
+        ('Beras Maknyus 5kg', 'Staple', '8999999111', 65000, 60000, 'sack', 20),
+        ('Aqua 600ml', 'Drink', '888881111', 3000, 2000, 'bottle', 50),
+        ('Telur Ayam', 'Food', NULL, 2000, 1500, 'pcs', 200),
+        ('Minyak Goreng Bimoli 1L', 'Cooking', '89912345678', 18000, 15500, 'pouch', 30),
+        ('Kopi Kapal Api', 'Drink', '8999999222', 1500, 1000, 'sachet', 150);
+      `);
+      console.log('Dummy products seeded successfully!');
+
+      await db.execAsync(`
+        INSERT INTO Customer (name, phone, accumulatedPoints) VALUES
+        ('Budi', '08123456789', 50),
+        ('Siti', '08987654321', 120),
+        ('Pak RT', '08555555555', 0);
+      `);
+      console.log('Dummy customers seeded successfully!');
+      
+    } catch (error) {
+      console.error('Failed to wipe or seed dummy data:', error);
+    }
+  }
 }
+
