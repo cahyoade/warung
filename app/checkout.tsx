@@ -21,6 +21,9 @@ export default function CheckoutScreen() {
   const [paymentType, setPaymentType] = useState<'Cash' | 'PayLater'>('Cash');
   const [cashGiven, setCashGiven] = useState('');
 
+  const [finalizedTransactionId, setFinalizedTransactionId] = useState<number | null>(null);
+  const [finalizedPoints, setFinalizedPoints] = useState<number>(0);
+
   // Total Profit is sum of (activeUnitPrice - costPrice) * qty
   const totalProfit = cartData.reduce((sum, item) => sum + ((item.activeUnitPrice - item.costPrice) * item.cartQty), 0);
 
@@ -75,27 +78,51 @@ export default function CheckoutScreen() {
         );
       }
 
-      // Print receipt (best-effort — don't block the transaction on print failure)
-      const printed = await PrinterService.printReceipt({
-        transactionId: transactionId,
-        items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
-        total: totalAmount,
-        cashGiven: actualCash,
-        customerName: customers.find(c => c.id === selectedCustomerId)?.name,
-        pointsEarned: pointsAwarded,
-      });
-
-      const printNote = printed ? '' : ' (Receipt could not be printed)';
-
-      Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}${printNote}`, [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
-      ]);
+      setFinalizedTransactionId(transactionId);
+      setFinalizedPoints(pointsAwarded);
+      Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}`);
       
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to finalize transaction');
     }
   };
+
+  const handlePrint = async () => {
+    if (finalizedTransactionId === null) return;
+    const actualCash = paymentType === 'Cash' ? totalAmount : 0;
+    const printed = await PrinterService.printReceipt({
+      transactionId: finalizedTransactionId,
+      items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
+      total: totalAmount,
+      cashGiven: actualCash,
+      customerName: customers.find(c => c.id === selectedCustomerId)?.name,
+      pointsEarned: finalizedPoints,
+    });
+
+    if (!printed) {
+      Alert.alert('Error', 'Receipt could not be printed. Please check printer connection.');
+    }
+  };
+
+  if (finalizedTransactionId !== null) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.heading}>Transaction Successful! 🎉</Text>
+        <Text style={styles.totalText}>Transaction #{finalizedTransactionId}</Text>
+        
+        <View style={{ marginTop: 40, width: '100%' }}>
+          <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
+             <Text style={styles.printBtnText}>🖨️ Print Receipt</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#64748b' }]} onPress={() => router.replace('/(tabs)')}>
+             <Text style={styles.finalizeBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -153,7 +180,7 @@ export default function CheckoutScreen() {
       )}
 
       <TouchableOpacity style={styles.finalizeBtn} onPress={handleFinalize}>
-         <Text style={styles.finalizeBtnText}>Finalize & Auto-Print</Text>
+         <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
       </TouchableOpacity>
       <View style={{height: 100}} />
     </ScrollView>
@@ -179,5 +206,8 @@ const styles = StyleSheet.create({
   changeText: { marginTop: 10, color: '#0ea5e9', fontSize: 16, fontWeight: 'bold' },
   payLaterWarning: { backgroundColor: '#ffedd5', padding: 15, borderRadius: 10, marginBottom: 20 },
   finalizeBtn: { backgroundColor: '#0f172a', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
-  finalizeBtnText: { color: '#f8fafc', fontWeight: 'bold', fontSize: 20 }
+  finalizeBtnText: { color: '#f8fafc', fontWeight: 'bold', fontSize: 20 },
+  printBtn: { backgroundColor: '#3b82f6', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
+  printBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 20 }
 });
+
