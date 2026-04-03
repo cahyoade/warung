@@ -118,7 +118,10 @@ export class PrinterService {
         // ── Customer / loyalty ──
         if (data.customerName) {
             r += `<L>Pelanggan: ${data.customerName}</L>\n`;
-            if (data.pointsEarned && data.pointsEarned > 0) {
+            if (data.cashGiven < data.total) {
+                r += `<L>* Poin akan diberikan saat</L>\n`;
+                r += `<L>  hutang dilunasi.</L>\n`;
+            } else if (data.pointsEarned && data.pointsEarned > 0) {
                 r += `<L>Poin Dapat : +${data.pointsEarned}</L>\n`;
             }
             if (data.totalPointsBalance) {

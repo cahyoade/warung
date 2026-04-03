@@ -1,0 +1,218 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useState } from 'react';
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { PrinterService } from '../src/utils/PrinterService';
+
+type Customer = { id: number, name: string, phone: string, accumulatedPoints: number };
+type TransactionItem = { name: string, quantity: number, subtotal: number };
+type Transaction = { id: number, date: string, totalAmount: number, cashGiven: number, items: TransactionItem[] };
+
+export default function SettleDebtScreen() {
+  const db = useSQLiteContext();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const customerId = parseInt(params.customerId as string, 10);
+
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [unpaidTransactions, setUnpaidTransactions] = useState<Transaction[]>([]);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [totalDebt, setTotalDebt] = useState(0);
+
+  useEffect(() => {
+    if (isNaN(customerId)) return;
+    fetchData();
+  }, [customerId]);
+
+  const fetchData = async () => {
+    const cust = await db.getFirstAsync<Customer>('SELECT * FROM Customer WHERE id = ?', [customerId]);
+    setCustomer(cust);
+
+    const txns = await db.getAllAsync<Transaction>(`
+      SELECT id, date, totalAmount, cashGiven 
+      FROM "Transaction" 
+      WHERE customerId = ? AND paymentStatus = 'Unpaid' AND isVoided = 0
+      ORDER BY date ASC
+    `, [customerId]);
+    
+    const txnsWithItems = await Promise.all(txns.map(async t => {
+      const items = await db.getAllAsync<TransactionItem>(
+        `SELECT p.name, ti.quantity, ti.subtotal 
+         FROM TransactionItem ti 
+         JOIN Product p ON ti.productId = p.id 
+         WHERE ti.transactionId = ?`, 
+        [t.id]
+      );
+      return { ...t, items };
+    }));
+    
+    setUnpaidTransactions(txnsWithItems);
+
+    const debt = txnsWithItems.reduce((sum, t) => sum + (t.totalAmount - t.cashGiven), 0);
+    setTotalDebt(debt);
+    setPaymentAmount(debt.toString());
+  };
+
+  const handleSettle = async () => {
+    const amount = parseFloat(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    if (amount > totalDebt) {
+      Alert.alert('Error', 'Payment cannot exceed total debt.');
+      return;
+    }
+
+    try {
+      let remainingPayment = amount;
+      let pointsAwarded = Math.floor(amount / 10000); // 1 point per 10k
+
+      await db.withTransactionAsync(async () => {
+        // 1. Distribute payment across transactions
+        for (const txn of unpaidTransactions) {
+          if (remainingPayment <= 0) break;
+          
+          const txnOwes = txn.totalAmount - txn.cashGiven;
+          const applyToTxn = Math.min(txnOwes, remainingPayment);
+          
+          const newCashGiven = txn.cashGiven + applyToTxn;
+          const newStatus = newCashGiven >= txn.totalAmount ? 'Paid' : 'Unpaid';
+          
+          await db.runAsync(
+            'UPDATE "Transaction" SET cashGiven = ?, paymentStatus = ? WHERE id = ?',
+            [newCashGiven, newStatus, txn.id]
+          );
+          
+          remainingPayment -= applyToTxn;
+        }
+
+        // 2. Insert Debt Settlement record for reporting
+        const dateStr = new Date().toISOString();
+        await db.runAsync(
+          'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId, isVoided) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [dateStr, amount, 0, amount, 'DebtSettlement', customerId, 0]
+        );
+
+        // 3. Award Points
+        if (pointsAwarded > 0) {
+          await db.runAsync(
+            'UPDATE Customer SET accumulatedPoints = accumulatedPoints + ? WHERE id = ?',
+            [pointsAwarded, customerId]
+          );
+        }
+      });
+
+      // 4. Print Receipt
+      const printed = await PrinterService.printReceipt({
+        transactionId: 0, // indicates special receipt or you can omit
+        items: [{ name: 'Debt Settlement', qty: 1, subtotal: amount }],
+        total: amount,
+        cashGiven: amount,
+        customerName: customer?.name,
+        pointsEarned: pointsAwarded,
+      });
+
+      if (!printed) {
+        Alert.alert('Warning', 'Transaction recorded, but receipt could not be printed.');
+      } else {
+        Alert.alert('Success', `Debt settled successfully! Awarded ${pointsAwarded} pts.`);
+      }
+
+      router.replace('/(tabs)/customers');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to settle debt.');
+    }
+  };
+
+  if (!customer) return null;
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.heading}>Settle Debt for {customer.name}</Text>
+      
+      <View style={styles.summaryBox}>
+        <Text style={styles.totalLabel}>Total Owed</Text>
+        <Text style={styles.totalText}>Rp {totalDebt.toLocaleString()}</Text>
+      </View>
+
+      <Text style={styles.label}>Outstanding Transactions</Text>
+      <View style={styles.listContainer}>
+        {unpaidTransactions.length === 0 ? (
+          <Text style={styles.emptyText}>No pending debt found.</Text>
+        ) : (
+          unpaidTransactions.map(t => {
+            const owes = t.totalAmount - t.cashGiven;
+            return (
+              <View key={t.id} style={styles.txnCard}>
+                <View style={styles.txnRowHeader}>
+                  <View>
+                    <Text style={styles.txnDate}>{new Date(t.date).toLocaleString()}</Text>
+                    <Text style={styles.txnId}>Transaction #{t.id}</Text>
+                  </View>
+                  <Text style={styles.txnOwes}>Rp {owes.toLocaleString()}</Text>
+                </View>
+                <View style={styles.txnItemsContainer}>
+                  {t.items.map((i, idx) => (
+                    <View key={idx} style={styles.itemRow}>
+                       <Text style={styles.itemName}>{i.quantity}x {i.name}</Text>
+                       <Text style={styles.itemPrice}>Rp {i.subtotal.toLocaleString()}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+
+      <View style={styles.inputSection}>
+        <Text style={styles.label}>Settlement Amount</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          value={paymentAmount}
+          onChangeText={setPaymentAmount}
+          placeholder="Enter amount to pay"
+        />
+        <Text style={styles.hint}>1 point awarded per Rp 10,000 paid</Text>
+      </View>
+
+      <TouchableOpacity 
+        style={[styles.settleBtn, unpaidTransactions.length === 0 && { backgroundColor: '#cbd5e1' }]} 
+        onPress={handleSettle}
+        disabled={unpaidTransactions.length === 0}
+      >
+        <Text style={styles.settleBtnText}>Submit Payment & Print Receipt</Text>
+      </TouchableOpacity>
+      <View style={{ height: 50 }} />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20, backgroundColor: '#fcfcfc' },
+  heading: { fontSize: 24, fontWeight: '800', marginBottom: 20, color: '#1a1a1a' },
+  summaryBox: { backgroundColor: '#fee2e2', padding: 20, borderRadius: 12, marginBottom: 30, alignItems: 'center' },
+  totalLabel: { color: '#ef4444', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  totalText: { color: '#b91c1c', fontSize: 32, fontWeight: '900' },
+  label: { fontSize: 16, fontWeight: 'bold', color: '#334155', marginBottom: 15 },
+  listContainer: { marginBottom: 30 },
+  txnCard: { backgroundColor: '#fff', borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  txnRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  txnDate: { fontWeight: 'bold', color: '#334155', fontSize: 14 },
+  txnId: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
+  txnOwes: { fontWeight: '900', color: '#ef4444', fontSize: 16 },
+  txnItemsContainer: { padding: 15 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  itemName: { color: '#475569', fontSize: 14 },
+  itemPrice: { color: '#64748b', fontSize: 14, fontWeight: '600' },
+  emptyText: { color: '#94a3b8', fontStyle: 'italic' },
+  inputSection: { marginBottom: 30 },
+  input: { backgroundColor: '#fff', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', fontSize: 20, fontWeight: 'bold' },
+  hint: { color: '#64748b', fontSize: 12, marginTop: 8 },
+  settleBtn: { backgroundColor: '#10b981', padding: 20, borderRadius: 12, alignItems: 'center' },
+  settleBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
+});

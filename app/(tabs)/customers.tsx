@@ -45,7 +45,10 @@ export default function CustomersScreen() {
         keyExtractor={(item) => item.id.toString()}
         ListEmptyComponent={<Text style={styles.emptyText}>No customers registered yet!</Text>}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <TouchableOpacity 
+            style={styles.row}
+            onPress={() => router.push({ pathname: '/settle-debt', params: { customerId: item.id } })}
+          >
             <View>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.phone}>{item.phone} • {item.accumulatedPoints} pts</Text>
@@ -55,7 +58,7 @@ export default function CustomersScreen() {
                   {item.totalDebt > 0 ? `Owes Rp ${item.totalDebt.toLocaleString()}` : 'No Debt'}
                 </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
       />
     </View>

@@ -21,7 +21,7 @@ export default function ReportsScreen() {
     const agg = await db.getFirstAsync<{ rev: number, prof: number }>(`
       SELECT SUM(totalAmount) as rev, SUM(totalProfit) as prof 
       FROM "Transaction" 
-      WHERE isVoided = 0
+      WHERE isVoided = 0 AND paymentStatus = 'Paid'
     `);
     
     setTotalRevenue(agg?.rev || 0);
@@ -141,11 +141,15 @@ export default function ReportsScreen() {
           >
             <View>
                 <Text style={[styles.txnDate, item.isVoided ? styles.voidedText : null]}>{new Date(item.date).toLocaleString()}</Text>
-                <Text style={[styles.txnStatus, item.isVoided ? styles.voidedText : null]}>{item.isVoided ? 'VOID' : item.paymentStatus}</Text>
+                <Text style={[styles.txnStatus, item.isVoided ? styles.voidedText : null]}>
+                  {item.isVoided ? 'VOID' : (item.paymentStatus === 'DebtSettlement' ? 'DEBT SETTLEMENT' : item.paymentStatus)}
+                </Text>
             </View>
             <View style={{alignItems: 'flex-end'}}>
                 <Text style={[styles.txnAmount, item.isVoided ? styles.voidedText : null]}>Rp {item.totalAmount.toLocaleString()}</Text>
-                <Text style={[styles.txnProfit, item.isVoided ? styles.voidedText : null]}>Profit: Rp {item.totalProfit.toLocaleString()}</Text>
+                {item.paymentStatus !== 'DebtSettlement' && (
+                  <Text style={[styles.txnProfit, item.isVoided ? styles.voidedText : null]}>Profit: Rp {item.totalProfit.toLocaleString()}</Text>
+                )}
             </View>
           </TouchableOpacity>
         )}
