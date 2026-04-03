@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import React from 'react';
+import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import React, { useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type Product = { id: number, name: string, stockCount: number, basePrice: number, costPrice: number, unitOfMeasure: string };
 type PriceTier = { productId: number, minQuantity: number, price: number };
+
+type ProductWithTierRow = Product & { tierMinQty: number | null, tierPrice: number | null };
 
 // The CartItem extends Product to add logic info
 export type CartItem = Product & { cartQty: number, activeUnitPrice: number };
@@ -24,9 +25,39 @@ export default function POSScreen() {
   useFocusEffect(
     React.useCallback(() => {
       async function fetchProducts() {
-        const prods = await db.getAllAsync<Product>('SELECT * FROM Product');
-        const trs = await db.getAllAsync<PriceTier>('SELECT * FROM ProductPriceTier');
-        setProducts(prods);
+        const rows = await db.getAllAsync<ProductWithTierRow>(`
+          SELECT p.*, 
+                 t.minQuantity AS tierMinQty, 
+                 t.price AS tierPrice
+          FROM Product p
+          LEFT JOIN ProductPriceTier t ON p.id = t.productId
+        `);
+
+        const productsMap = new Map<number, Product>();
+        const trs: PriceTier[] = [];
+
+        for (const row of rows) {
+          if (!productsMap.has(row.id)) {
+            productsMap.set(row.id, {
+              id: row.id,
+              name: row.name,
+              stockCount: row.stockCount,
+              basePrice: row.basePrice,
+              costPrice: row.costPrice,
+              unitOfMeasure: row.unitOfMeasure,
+            });
+          }
+
+          if (row.tierMinQty !== null && row.tierPrice !== null) {
+            trs.push({
+              productId: row.id,
+              minQuantity: row.tierMinQty,
+              price: row.tierPrice,
+            });
+          }
+        }
+
+        setProducts(Array.from(productsMap.values()));
         setTiers(trs);
       }
       fetchProducts();
@@ -46,7 +77,7 @@ export default function POSScreen() {
       // Recalculate prices based on tiers
       return newCart.map(item => {
         // Find best tier
-        const productTiers = tiers.filter(t => t.productId === item.id).sort((a,b) => b.minQuantity - a.minQuantity);
+        const productTiers = tiers.filter(t => t.productId === item.id).sort((a, b) => b.minQuantity - a.minQuantity);
         let bestPrice = item.basePrice;
         for (const t of productTiers) {
           if (item.cartQty >= t.minQuantity) {
@@ -76,7 +107,7 @@ export default function POSScreen() {
         <View style={styles.gridContainer}>
           <FlatList
             data={products}
-            numColumns={2}
+            numColumns={1}
             keyExtractor={p => p.id.toString()}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.productCard} onPress={() => addToCart(item)}>
@@ -84,7 +115,7 @@ export default function POSScreen() {
                 <Text style={styles.productPrice}>Rp {item.basePrice.toLocaleString()}</Text>
                 <Text style={styles.productStock}>{item.stockCount} {item.unitOfMeasure} left</Text>
                 {tiers.some(t => t.productId === item.id) && (
-                   <View style={styles.wholesaleBadge}><Text style={styles.wholesaleText}>Wholesale</Text></View>
+                  <View style={styles.wholesaleBadge}><Text style={styles.wholesaleText}>Wholesale</Text></View>
                 )}
               </TouchableOpacity>
             )}
@@ -99,7 +130,7 @@ export default function POSScreen() {
             keyExtractor={c => c.id.toString()}
             renderItem={({ item }) => (
               <View style={styles.cartItemRow}>
-                <View style={{flex: 1}}>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.cartItemName}>{item.name}</Text>
                   <Text style={styles.cartItemPrice}>Rp {item.activeUnitPrice.toLocaleString()} / {item.unitOfMeasure}</Text>
                 </View>
@@ -107,16 +138,16 @@ export default function POSScreen() {
                 <Text style={styles.cartSubtotal}>Rp {(item.cartQty * item.activeUnitPrice).toLocaleString()}</Text>
               </View>
             )}
-            ListEmptyComponent={<Text style={{textAlign: 'center', color: '#888', marginTop: 20}}>Cart is empty</Text>}
+            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 20 }}>Cart is empty</Text>}
           />
           <View style={styles.checkoutBox}>
             <Text style={styles.totalText}>Total: Rp {currentTotal.toLocaleString()}</Text>
-            <TouchableOpacity 
-               style={[styles.checkoutBtn, cart.length === 0 && {backgroundColor: '#ccc'}]} 
-               disabled={cart.length === 0}
-               onPress={() => router.push({ pathname: '/checkout', params: { cartData: JSON.stringify(cart), totalAmount: currentTotal } })}
+            <TouchableOpacity
+              style={[styles.checkoutBtn, cart.length === 0 && { backgroundColor: '#ccc' }]}
+              disabled={cart.length === 0}
+              onPress={() => router.push({ pathname: '/checkout', params: { cartData: JSON.stringify(cart), totalAmount: currentTotal } })}
             >
-               <Text style={styles.checkoutBtnText}>Checkout</Text>
+              <Text style={styles.checkoutBtnText}>Checkout</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -141,10 +172,10 @@ const styles = StyleSheet.create({
   wholesaleText: { color: '#10b981', fontSize: 10, fontWeight: 'bold' },
   cartContainer: { flex: 1.2, backgroundColor: '#fff', borderLeftWidth: 1, borderColor: '#e2e8f0', padding: 15 },
   cartTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, color: '#334155' },
-  cartItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderColor: '#f1f5f9', paddingBottom: 10 },
+  cartItemRow: { flexDirection: 'column', justifyContent: 'space-between', marginBottom: 15, borderBottomWidth: 1, borderColor: '#f1f5f9', paddingBottom: 10 },
   cartItemName: { fontWeight: '600', color: '#1e293b' },
   cartItemPrice: { fontSize: 12, color: '#64748b' },
-  cartQty: { fontWeight: 'bold', marginHorizontal: 10, color: '#0ea5e9' },
+  cartQty: { fontWeight: 'bold', color: '#0ea5e9' },
   cartSubtotal: { fontWeight: 'bold', color: '#0f172a' },
   checkoutBox: { marginTop: 'auto', borderTopWidth: 1, borderColor: '#e2e8f0', paddingTop: 15 },
   totalText: { fontSize: 22, fontWeight: '900', color: '#1e293b', marginBottom: 15 },

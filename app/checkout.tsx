@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PrinterService } from '../src/utils/PrinterService';
 
 type Customer = { id: number, name: string };
@@ -11,13 +11,13 @@ export default function CheckoutScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams();
-  
+
   const cartData: CartItem[] = params.cartData ? JSON.parse(params.cartData as string) : [];
   const totalAmount = parseFloat(params.totalAmount as string) || 0;
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  
+
   const [paymentType, setPaymentType] = useState<'Cash' | 'PayLater'>('Cash');
   const [cashGiven, setCashGiven] = useState('');
 
@@ -54,7 +54,7 @@ export default function CheckoutScreen() {
         'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId) VALUES (?, ?, ?, ?, ?, ?)',
         [dateStr, totalAmount, totalProfit, actualCash, status, selectedCustomerId || null]
       );
-      
+
       const transactionId = res.lastInsertRowId;
 
       // 2. Insert Items & Deplete Stock
@@ -63,7 +63,7 @@ export default function CheckoutScreen() {
           'INSERT INTO TransactionItem (transactionId, productId, quantity, unitPrice, unitCost, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
           [transactionId, item.id, item.cartQty, item.activeUnitPrice, item.costPrice, item.cartQty * item.activeUnitPrice]
         );
-        
+
         await db.runAsync(
           'UPDATE Product SET stockCount = stockCount - ? WHERE id = ?',
           [item.cartQty, item.id]
@@ -81,7 +81,7 @@ export default function CheckoutScreen() {
       setFinalizedTransactionId(transactionId);
       setFinalizedPoints(pointsAwarded);
       Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}`);
-      
+
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to finalize transaction');
@@ -110,14 +110,14 @@ export default function CheckoutScreen() {
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={styles.heading}>Transaction Successful! 🎉</Text>
         <Text style={styles.totalText}>Transaction #{finalizedTransactionId}</Text>
-        
+
         <View style={{ marginTop: 40, width: '100%' }}>
           <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
-             <Text style={styles.printBtnText}>🖨️ Print Receipt</Text>
+            <Text style={styles.printBtnText}>🖨️ Print Receipt</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#64748b' }]} onPress={() => router.replace('/(tabs)')}>
-             <Text style={styles.finalizeBtnText}>Done</Text>
+            <Text style={styles.finalizeBtnText}>Done</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -128,61 +128,62 @@ export default function CheckoutScreen() {
     <ScrollView style={styles.container}>
       <Text style={styles.heading}>Finalize Transaction</Text>
       <View style={styles.summaryBox}>
-        <Text style={styles.totalText}>Total Due: Rp {totalAmount.toLocaleString()}</Text>
+        <Text style={styles.totalLabel}>Total Due</Text>
+        <Text style={styles.totalText}>Rp {totalAmount.toLocaleString()}</Text>
         <Text style={styles.itemCountText}>{cartData.length} items</Text>
       </View>
 
       <Text style={styles.label}>Customer (Optional for Cash)</Text>
       <View style={styles.customerList}>
-        <TouchableOpacity 
-           style={[styles.customerBtn, selectedCustomerId === null && styles.customerBtnActive]} 
-           onPress={() => setSelectedCustomerId(null)}>
-           <Text style={selectedCustomerId === null ? {color: '#fff'} : {}}>No Customer</Text>
+        <TouchableOpacity
+          style={[styles.customerBtn, selectedCustomerId === null && styles.customerBtnActive]}
+          onPress={() => setSelectedCustomerId(null)}>
+          <Text style={selectedCustomerId === null ? { color: '#fff' } : {}}>No Customer</Text>
         </TouchableOpacity>
         {customers.map(c => (
-           <TouchableOpacity 
-             key={c.id} 
-             style={[styles.customerBtn, selectedCustomerId === c.id && styles.customerBtnActive]} 
-             onPress={() => setSelectedCustomerId(c.id)}>
-             <Text style={selectedCustomerId === c.id ? {color: '#fff'} : {}}>{c.name}</Text>
-           </TouchableOpacity>
+          <TouchableOpacity
+            key={c.id}
+            style={[styles.customerBtn, selectedCustomerId === c.id && styles.customerBtnActive]}
+            onPress={() => setSelectedCustomerId(c.id)}>
+            <Text style={selectedCustomerId === c.id ? { color: '#fff' } : {}}>{c.name}</Text>
+          </TouchableOpacity>
         ))}
       </View>
 
       <Text style={styles.label}>Payment Method</Text>
       <View style={styles.row}>
         <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'Cash' && styles.payMethodBtnActive]} onPress={() => setPaymentType('Cash')}>
-           <Text style={[styles.payMethodText, paymentType === 'Cash' && {color: '#fff'}]}>💰 Cash</Text>
+          <Text style={[styles.payMethodText, paymentType === 'Cash' && { color: '#fff' }]}>💰 Cash</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'PayLater' && styles.payMethodBtnActive]} onPress={() => setPaymentType('PayLater')}>
-           <Text style={[styles.payMethodText, paymentType === 'PayLater' && {color: '#fff'}]}>📘 Pay Later</Text>
+          <Text style={[styles.payMethodText, paymentType === 'PayLater' && { color: '#fff' }]}>📘 Pay Later</Text>
         </TouchableOpacity>
       </View>
 
       {paymentType === 'Cash' && (
         <View style={styles.cashSection}>
-           <Text style={styles.label}>Cash Given by Customer</Text>
-           <TextInput 
-              style={styles.input} 
-              keyboardType="numeric" 
-              placeholder="Rp" 
-              value={cashGiven} 
-              onChangeText={setCashGiven} 
-           />
-           {change > 0 && <Text style={styles.changeText}>Change to return: Rp {change.toLocaleString()}</Text>}
+          <Text style={styles.label}>Cash Given by Customer</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="Rp"
+            value={cashGiven}
+            onChangeText={setCashGiven}
+          />
+          {change > 0 && <Text style={styles.changeText}>Change to return: Rp {change.toLocaleString()}</Text>}
         </View>
       )}
 
       {paymentType === 'PayLater' && (
         <View style={styles.payLaterWarning}>
-           <Text style={{color: '#c2410c'}}>This transaction will be recorded as Debt for the selected customer.</Text>
+          <Text style={{ color: '#c2410c' }}>This transaction will be recorded as Debt for the selected customer.</Text>
         </View>
       )}
 
       <TouchableOpacity style={styles.finalizeBtn} onPress={handleFinalize}>
-         <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
+        <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
       </TouchableOpacity>
-      <View style={{height: 100}} />
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 }
@@ -190,7 +191,8 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#fcfcfc' },
   heading: { fontSize: 24, fontWeight: '800', marginBottom: 20, color: '#1a1a1a' },
-  summaryBox: { backgroundColor: '#1e293b', padding: 20, borderRadius: 12, alignItems: 'center', marginBottom: 30 },
+  summaryBox: { backgroundColor: '#1e293b', padding: 20, borderRadius: 12, marginBottom: 30 },
+  totalLabel: { color: '#a7f3d0', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   totalText: { color: '#10b981', fontSize: 32, fontWeight: '900' },
   itemCountText: { color: '#94a3b8', marginTop: 5 },
   label: { fontSize: 16, fontWeight: 'bold', color: '#334155', marginBottom: 10 },
