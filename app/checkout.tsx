@@ -75,16 +75,19 @@ export default function CheckoutScreen() {
         );
       }
 
-      PrinterService.printReceipt({
-         transactionId: transactionId,
-         items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
-         total: totalAmount,
-         cashGiven: actualCash,
-         customerName: customers.find(c => c.id === selectedCustomerId)?.name,
-         pointsEarned: pointsAwarded
+      // Print receipt (best-effort — don't block the transaction on print failure)
+      const printed = await PrinterService.printReceipt({
+        transactionId: transactionId,
+        items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
+        total: totalAmount,
+        cashGiven: actualCash,
+        customerName: customers.find(c => c.id === selectedCustomerId)?.name,
+        pointsEarned: pointsAwarded,
       });
 
-      Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}`, [
+      const printNote = printed ? '' : ' (Receipt could not be printed)';
+
+      Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}${printNote}`, [
         { text: 'OK', onPress: () => router.replace('/(tabs)') }
       ]);
       

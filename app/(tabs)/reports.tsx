@@ -3,8 +3,9 @@ import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert } from 'react
 import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from 'expo-router';
 import React from 'react';
+import { PrinterService } from '../../src/utils/PrinterService';
 
-type Transaction = { id: number, date: string, totalAmount: number, totalProfit: number, paymentStatus: string, isVoided: number };
+type Transaction = { id: number, date: string, totalAmount: number, totalProfit: number, paymentStatus: string, isVoided: number, cashGiven: number, customerId: number | null };
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
@@ -44,7 +45,7 @@ export default function ReportsScreen() {
       `Total: Rp ${txn.totalAmount.toLocaleString()}\nStatus: ${txn.paymentStatus}`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reprint Receipt', onPress: () => Alert.alert('Hardware', 'Printer logic will fire here (Phase 5)') },
+        { text: 'Reprint Receipt', onPress: () => reprintReceipt(txn) },
         { 
           text: 'Void / Cancel Sale', 
           style: 'destructive',
@@ -52,6 +53,37 @@ export default function ReportsScreen() {
         }
       ]
     );
+  };
+
+  const reprintReceipt = async (txn: Transaction) => {
+    try {
+      const items = await db.getAllAsync<{name: string, quantity: number, subtotal: number}>(
+        `SELECT p.name, t.quantity, t.subtotal 
+         FROM TransactionItem t 
+         JOIN Product p ON t.productId = p.id 
+         WHERE t.transactionId = ?`, 
+        [txn.id]
+      );
+
+      let customerName = undefined;
+      if (txn.customerId) {
+        const customer = await db.getFirstAsync<{name: string}>('SELECT name FROM Customer WHERE id = ?', [txn.customerId]);
+        if (customer) {
+          customerName = customer.name;
+        }
+      }
+
+      await PrinterService.printReceipt({
+        transactionId: txn.id,
+        items: items.map(i => ({ name: i.name, qty: i.quantity, subtotal: i.subtotal })),
+        total: txn.totalAmount,
+        cashGiven: txn.cashGiven || txn.totalAmount,
+        customerName: customerName,
+      });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to fetch transaction details for reprint.');
+    }
   };
 
   const confirmVoid = (txn: Transaction) => {

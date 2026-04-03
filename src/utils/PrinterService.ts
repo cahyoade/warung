@@ -1,9 +1,12 @@
+import { Alert, Platform, PermissionsAndroid } from 'react-native';
 import { BLEPrinter } from 'react-native-thermal-receipt-printer';
-import { Alert } from 'react-native';
+
+// MPT-II (58mm) = 48mm printable width = 384 dots = 32 chars (Font A, 12x24)
+const LINE_WIDTH = 32;
 
 export type ReceiptData = {
     transactionId: number;
-    items: {name: string, qty: number, subtotal: number}[];
+    items: { name: string; qty: number; subtotal: number }[];
     total: number;
     cashGiven: number;
     customerName?: string;
@@ -11,57 +14,187 @@ export type ReceiptData = {
     totalPointsBalance?: number;
 };
 
+// ── Formatting helpers for 32-column thermal printer ──────────────────
+
+/** Pad / truncate a string to exactly `width` characters */
+function pad(text: string, width: number, align: 'left' | 'right' = 'left'): string {
+    if (text.length > width) return text.substring(0, width);
+    return align === 'right' ? text.padStart(width) : text.padEnd(width);
+}
+
+/** Format a currency value (no decimals, Indonesian locale) */
+function rp(n: number): string {
+    return `Rp ${n.toLocaleString('id-ID')}`;
+}
+
+/** Build a line with a left label and right-aligned value */
+function labelValue(label: string, value: string): string {
+    const gap = LINE_WIDTH - label.length - value.length;
+    if (gap < 1) {
+        // Value too long — put on next line, right-aligned
+        return `${label}\n${pad(value, LINE_WIDTH, 'right')}\n`;
+    }
+    return `${label}${' '.repeat(gap)}${value}\n`;
+}
+
+/** A full-width separator */
+function separator(char = '-'): string {
+    return char.repeat(LINE_WIDTH) + '\n';
+}
+
 export class PrinterService {
-    static buildReceiptFormat(data: ReceiptData): string {
-        let printText = "================================\n";
-        printText += "           WARUNG POS           \n";
-        printText += "================================\n\n";
-        
-        printText += `Txn: #${data.transactionId}\n`;
-        printText += `Date: ${new Date().toLocaleString()}\n\n`;
+    static isPrinterConnected = false;
 
-        data.items.forEach(item => {
-            printText += `${item.name}\n`;
-            printText += `  x${item.qty} ......... Rp ${item.subtotal.toLocaleString()}\n`;
-        });
+    static async requestPermissions(): Promise<boolean> {
+        if (Platform.OS !== 'android') return true;
 
-        printText += "\n--------------------------------\n";
-        printText += `TOTAL DUE : Rp ${data.total.toLocaleString()}\n`;
-        printText += `CASH PAID : Rp ${data.cashGiven.toLocaleString()}\n`;
-        const change = data.cashGiven - data.total;
-        printText += `CHANGE    : Rp ${(change > 0 ? change : 0).toLocaleString()}\n`;
-        printText += "--------------------------------\n\n";
+        try {
+            const apiLevel = Platform.Version;
 
-        if (data.customerName) {
-            printText += `Customer: ${data.customerName}\n`;
-            if (data.pointsEarned && data.pointsEarned > 0) {
-                 printText += `Points Earned: +${data.pointsEarned}\n`;
+            if (typeof apiLevel === 'number' && apiLevel >= 31) {
+                // Android 12+
+                const results = await PermissionsAndroid.requestMultiple([
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                ]);
+
+                return (
+                    results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
+                    results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED
+                );
+            } else {
+                // Android 11 and below — BLE scanning requires location permission
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+                );
+                return granted === PermissionsAndroid.RESULTS.GRANTED;
             }
-            if (data.totalPointsBalance) {
-                 printText += `Total Points:  ${data.totalPointsBalance}\n`;
-            }
-            printText += "\n";
+        } catch (err) {
+            console.error('Permission request error:', err);
+            return false;
         }
-
-        printText += "      Thank You For Shopping!   \n";
-        printText += "================================\n\n\n"; // Trailing newlines to feed paper
-
-        return printText;
     }
 
-    static async printReceipt(data: ReceiptData) {
-        const rawEscPosString = this.buildReceiptFormat(data);
-        console.log("SENDING TO BLUETOOTH PRINTER:");
-        
+    /**
+     * Build a receipt string formatted for 32-column (58mm) thermal printers.
+     * Uses the library's XML-like tags for alignment: <C>, <L>, <B>.
+     */
+    static buildReceiptFormat(data: ReceiptData): string {
+        let r = '';
+
+        // ── Header ──
+        r += separator('=');
+        r += '<C><B>WARUNG POS</B></C>\n';
+        r += separator('=');
+
+        // ── Transaction info ──
+        r += `<L>Txn: #${data.transactionId}</L>\n`;
+        r += `<L>${new Date().toLocaleString('id-ID')}</L>\n`;
+        r += '\n';
+
+        // ── Items ──
+        data.items.forEach(item => {
+            const price = rp(item.subtotal);
+            // Item name on its own line (truncated if needed)
+            const name = item.name.length > LINE_WIDTH
+                ? item.name.substring(0, LINE_WIDTH - 1) + '…'
+                : item.name;
+            r += `<L>${name}</L>\n`;
+            // Qty × unit + subtotal, right-aligned
+            const qtyLabel = `  x${item.qty}`;
+            r += labelValue(qtyLabel, price);
+        });
+
+        // ── Totals ──
+        r += separator('-');
+        r += `<B>${labelValue('TOTAL', rp(data.total))}</B>`;
+        r += labelValue('BAYAR', rp(data.cashGiven));
+        const change = data.cashGiven - data.total;
+        if (change > 0) {
+            r += labelValue('KEMBALI', rp(change));
+        }
+        r += separator('-');
+
+        // ── Customer / loyalty ──
+        if (data.customerName) {
+            r += `<L>Pelanggan: ${data.customerName}</L>\n`;
+            if (data.pointsEarned && data.pointsEarned > 0) {
+                r += `<L>Poin Dapat : +${data.pointsEarned}</L>\n`;
+            }
+            if (data.totalPointsBalance) {
+                r += `<L>Total Poin : ${data.totalPointsBalance}</L>\n`;
+            }
+            r += '\n';
+        }
+
+        // ── Footer ──
+        r += '<C>Terima Kasih!</C>\n';
+        r += separator('=');
+
+        return r;
+    }
+
+    /**
+     * Print a receipt on the already-connected BLE printer.
+     * Attempt to automatically connect if not connected.
+     */
+    static async printReceipt(data: ReceiptData): Promise<boolean> {
+        // Guard: native module may not exist in Expo Go
+        if (!BLEPrinter || typeof BLEPrinter.printBill !== 'function') {
+            console.warn('BLEPrinter native module is not available — skipping print.');
+            Alert.alert(
+                'Printer Unavailable',
+                'The BLE printing module is not loaded. Make sure you are running a custom dev client (npx expo run:android), not Expo Go.'
+            );
+            return false;
+        }
+
+        if (!this.isPrinterConnected) {
+            console.log('Attempting auto-connect...');
+            const hasPermission = await this.requestPermissions();
+            if (hasPermission) {
+                try {
+                    await BLEPrinter.init();
+                    try {
+                        await BLEPrinter.closeConn();
+                    } catch {
+                        // ignore
+                    }
+                    const devices = await BLEPrinter.getDeviceList();
+                    if (devices && devices.length > 0) {
+                        const device = devices[0];
+                        await BLEPrinter.connectPrinter(device.inner_mac_address);
+                        this.isPrinterConnected = true;
+                    }
+                } catch (e) {
+                    console.warn('Auto connection failed', e);
+                }
+            }
+
+            if (!this.isPrinterConnected) {
+                Alert.alert(
+                    'Printer Error',
+                    'Could not connect to a printer. Please turn on your Bluetooth thermal printer and check the connection in the Settings screen.'
+                );
+                return false;
+            }
+        }
+
+        const receiptText = this.buildReceiptFormat(data);
+        console.log('SENDING TO BLUETOOTH PRINTER:\n', receiptText);
+
         try {
-            // Initialize the module and print if a device was connected via Settings screen
-            await BLEPrinter.init();
-            
-            // You can print raw strings by using printBill
-            BLEPrinter.printBill(rawEscPosString, { beep: false, cut: false });
-        } catch(e) {
-            console.error(e);
-            Alert.alert('Printer Error', 'Failed to communicate with printer. Ensure it is connected in settings.');
+            await BLEPrinter.printBill(receiptText, { beep: false, cut: false });
+            return true;
+        } catch (e: any) {
+            const msg = e?.message || 'Unknown error';
+            console.error('PrinterService.printReceipt failed:', msg);
+            Alert.alert(
+                'Printer Error',
+                `Failed to print receipt: ${msg}\n\nMake sure the printer is connected via the Settings screen first.`
+            );
+            return false;
         }
     }
 }
+
