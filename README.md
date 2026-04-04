@@ -1,75 +1,125 @@
 # Warung POS 🏪
 
-An offline-first, high-performance Point of Sale (POS) system built with React Native (Expo) and SQLite. Designed specifically for small convenience stores (Warungs) running entirely on local Android devices with zero recurring server costs.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Built with Expo](https://img.shields.io/badge/Built%20with-Expo-000020?logo=expo)](https://expo.dev)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://android.com)
 
-## Features
-- **Offline-First**: Powered entirely by a local `expo-sqlite` database. No internet required to check out customers or track inventory.
-- **Dynamic Wholesale Pricing**: Setup pricing tiers (e.g., 1 pc = Rp 3000, 5 pcs = Rp 2500). The cart automatically reduces the subtotal as quantities increase.
-- **Kasbon (Debt) Tracking**: Check out customers using "Pay Later". The system automatically aggregates unpaid debts and flags them next to the customer's name.
-- **Profit Analytics**: Accurately tracks Historical Net Profit. Cost prices are locked in at the exact time of the transaction, ensuring fluctuating distributor prices don't ruin your reports.
-- **Loyalty Program**: Auto-calculates points (e.g. 1 point for every Rp 10,000 spent).
-- **Google Sheets Backup**: Raw REST algorithm to export your local SQLite data directly to your personal Google Drive (Zero-infrastructure).
-- **Thermal Printer Ready**: ESC/POS syntax builder ready to plug-and-play with Native Bluetooth Drivers.
+An offline-first, high-performance Point of Sale (POS) system built with React Native (Expo) and SQLite. Designed specifically for small convenience stores (Warungs) running entirely on local Android devices with zero recurring server costs.
 
 ---
 
-## 🚀 How to Setup & Run
+## ✨ Features
+
+- **Offline-First** — Powered entirely by a local `expo-sqlite` database. No internet required to check out customers or track inventory.
+- **Dynamic Wholesale Pricing** — Set up pricing tiers (e.g., 1 pc = Rp 3,000 / 5 pcs = Rp 2,500). The cart automatically applies the best price as quantities increase.
+- **Barcode Scanner** — Scan product barcodes using the device camera to instantly find and add items to the cart.
+- **Fractional Quantities** — Supports weight/volume-based products (kg, g, liter, etc.) with a quick-select or custom quantity modal.
+- **Cart Modification** — Adjust item quantities or remove items directly from the cart before checkout.
+- **Kasbon (Debt) Tracking** — Check out customers using "Pay Later". The system tracks unpaid debts per customer and supports partial or full settlement.
+- **Debt Settlement** — Distribute repayments across oldest unpaid transactions automatically, with loyalty points awarded on settlement.
+- **Profit Analytics** — Tracks historical net profit with cost prices locked at transaction time, so fluctuating distributor prices never distort your reports.
+- **Loyalty Program** — Auto-calculates reward points (e.g., 1 point per Rp 10,000 spent).
+- **Thermal Printer Ready** — ESC/POS receipt builder with native Bluetooth support via `react-native-thermal-receipt-printer`.
+- **Google Sheets Backup** — Raw REST export to push your local SQLite data directly to Google Drive (zero infrastructure).
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
+
 1. Install [Node.js](https://nodejs.org/en) (LTS version recommended)
-2. Install the Expo CLI globally: `npm install -g eas-cli`
-3. Download the **Expo Go** app on your physical Android phone (available on Google Play Store).
+2. Install the EAS CLI: `npm install -g eas-cli`
+3. Create a free account at [expo.dev](https://expo.dev)
 
-### 1. Installation
-Clone the repository and install all dependencies:
+### 1. Clone & Install
+
 ```bash
-# Navigate into the project folder
+git clone https://github.com/cahyoade/warung.git
 cd warung
-
-# Install node modules
 npm install
 ```
 
-### 2. Running Locally (Development)
-Because the current app uses standard Expo SDK modules (including `expo-sqlite` which works natively in Expo Go starting SDK 50+), you can immediately test the app on your phone without Android Studio!
+### 2. Development Build (Recommended)
+
+Because this app uses native modules (camera, Bluetooth), it requires a **custom development build** — Expo Go is not supported.
 
 ```bash
-# Start the Expo Bundler
-npx expo start
-```
-* A QR Code will appear in your terminal.
-* Open the **Expo Go** app on your phone and scan the QR code.
-* The app will instantly load and hot-reload as you make changes to the code.
-
-### 3. Building the Final APK (Production)
-When you are ready to permanently install the app on your store's tablet or phone (or if you install Custom Native Bluetooth plugins), you must compile it into a standalone `.apk`.
-
-```bash
-# Log into Expo Application Services (Free)
+# Log into Expo Application Services
 eas login
 
-# Build the Android APK in the cloud
-eas build -p android --profile preview
+# Trigger a cloud development build for Android
+eas build --profile development --platform android
 ```
-Once the build finishes, Expo will give you a link to download the `.apk` file. Transfer it to your Android device and install it!
+
+Once the build finishes, download and install the `.apk` on your Android device. Then start the JS bundler:
+
+```bash
+npx expo start --dev-client
+```
+
+Scan the QR code from the installed dev app — the app will load and hot-reload as you make changes.
+
+> **Note:** Whenever you install a new package with native code, you must trigger a new EAS build before that module is available at runtime.
+
+### 3. Production Build
+
+When ready to deploy to your store's device:
+
+```bash
+eas build --profile preview --platform android
+```
+
+Expo will provide a download link for the `.apk`. Transfer it to your Android device and install it.
 
 ---
 
 ## 🛠 Advanced Features Setup
 
-### Google Sheets Cloud Backup (Phase 6)
-To activate the cloud backup without paying for a server:
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a New Project.
-3. Search for "Google Sheets API" and **Enable** it.
-4. Go to **Credentials** -> Create **OAuth Client ID** (Type: Web Application).
-5. Pass this credential into a Google Sign-In package (like `@react-native-google-signin/google-signin` or `expo-auth-session`) to obtain an `AccessToken`.
-6. Pass the `AccessToken` to `SyncService.syncTransactionsToGoogleDrive()` to instantly push your database to your personal Google Drive!
+### Bluetooth Thermal Printing
 
-### Bluetooth Thermal Printing (Phase 5)
-The receipt format logic is encapsulated in `src/utils/PrinterService.ts`. 
-To actually pipe this data to your hardware:
-1. Pair your Android device with the 58mm/80mm thermal printer in standard Android Bluetooth Settings.
-2. Install a Native library (e.g., `react-native-thermal-receipt-printer`).
-3. Pass the generated string from `PrinterService.buildReceiptFormat()` directly to the printer's write command. 
-*(Note: Installing native Bluetooth libraries requires moving away from Expo Go and using an Expo Custom Dev Client `./android` folder).*
+Receipt formatting is encapsulated in `src/utils/PrinterService.ts`.
+
+1. Pair your Android device with your 58mm/80mm thermal printer via Android Bluetooth Settings.
+2. The app uses `react-native-thermal-receipt-printer` — already included in dependencies.
+3. Connect to the printer via the **Settings** screen inside the app.
+
+### Google Sheets Cloud Backup
+
+To activate cloud backup without a server:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project.
+2. Enable the **Google Sheets API**.
+3. Create an **OAuth Client ID** (Type: Web Application) under Credentials.
+4. Use `expo-auth-session` or `@react-native-google-signin/google-signin` to obtain an `AccessToken`.
+5. Pass the token to `SyncService.syncTransactionsToGoogleDrive()` to push data to your personal Google Drive.
+
+---
+
+## 🗂 Project Structure
+
+```
+warung/
+├── app/                  # Expo Router screens
+│   ├── (tabs)/           # Bottom tab screens (POS, Inventory, Reports, Settings)
+│   ├── checkout.tsx      # Cart checkout & payment screen
+│   ├── add-product.tsx   # Add new product
+│   ├── edit-product.tsx  # Edit existing product
+│   ├── settle-debt.tsx   # Customer debt settlement
+│   └── ...
+├── src/
+│   └── utils/
+│       └── PrinterService.ts   # ESC/POS receipt builder
+├── assets/               # Icons, splash screens
+├── eas.json              # EAS Build profiles
+└── app.json              # Expo app configuration
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0**.
+See the [LICENSE](./LICENSE) file for full details.
+
+> You are free to use, modify, and distribute this software under the terms of the GPL v3. Any derivative work must also be distributed under the same license.
