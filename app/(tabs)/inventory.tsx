@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useCallback, useState } from 'react';
+import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Product = { id: number, name: string, stockCount: number, basePrice: number, unitOfMeasure: string };
 
@@ -10,17 +10,35 @@ export default function InventoryScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
+  const [search, setSearch] = useState('');
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
 
   async function fetchProducts() {
     const result = await db.getAllAsync<Product>('SELECT * FROM Product');
     setProducts(result);
+    setFilteredProducts(
+      search.trim() === ''
+        ? result
+        : result.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    );
   }
 
   useFocusEffect(
     useCallback(() => {
       fetchProducts();
-    }, [])
+    }, [search])
   );
+
+  const handleSearch = (text: string) => {
+    setSearch(text);
+    if (text.trim() === '') {
+      setFilteredProducts(products);
+    } else {
+      setFilteredProducts(
+        products.filter((p) => p.name.toLowerCase().includes(text.toLowerCase()))
+      );
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -32,8 +50,18 @@ export default function InventoryScreen() {
         </TouchableOpacity>
       </View>
 
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search products..."
+        value={search}
+        onChangeText={handleSearch}
+        autoCorrect={false}
+        autoCapitalize="none"
+        clearButtonMode="while-editing"
+      />
+
       <FlatList
-        data={products}
+        data={filteredProducts}
         keyExtractor={(item) => item.id.toString()}
         ListEmptyComponent={<Text style={styles.emptyText}>No products found. Start by adding some goods!</Text>}
         renderItem={({ item }) => (
@@ -58,6 +86,16 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  searchInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
   container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fcfcfc' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   title: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },

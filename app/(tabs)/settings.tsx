@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import { ActivityIndicator, Alert, PermissionsAndroid, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GoogleSignin, statusCodes, type User } from '@react-native-google-signin/google-signin';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BLEPrinter } from 'react-native-thermal-receipt-printer';
+import { BackupScheduler } from '../../src/utils/BackupScheduler';
 import { PrinterService } from '../../src/utils/PrinterService';
+import { SyncService } from '../../src/utils/SyncService';
 
 /**
  * Request Bluetooth runtime permissions.
@@ -64,6 +68,79 @@ async function requestBluetoothPermissions(): Promise<boolean> {
 const HEARTBEAT_INTERVAL_MS = 8000; // ping printer every 8 seconds
 
 export default function SettingsScreen() {
+  // Google Sign-In state
+  const [userInfo, setUserInfo] = useState<User | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+
+  useEffect(() => {
+    GoogleSignin.configure({
+      scopes: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/spreadsheets',
+      ],
+      webClientId: '844339429836-mn5vcr28d27u9453249asq3attd9hpvn.apps.googleusercontent.com',
+      offlineAccess: false,
+      forceCodeForRefreshToken: false,
+    });
+    // Try to restore previous sign-in
+    if (GoogleSignin.hasPreviousSignIn()) {
+      const currentUser = GoogleSignin.getCurrentUser();
+      setUserInfo(currentUser);
+    }
+  }, []);
+
+  // Load auto-backup state
+  useEffect(() => {
+    BackupScheduler.isEnabled().then(setAutoBackupEnabled);
+    BackupScheduler.getLastBackupTime().then(setLastBackupTime);
+  }, []);
+
+  const toggleAutoBackup = async () => {
+    if (autoBackupEnabled) {
+      await BackupScheduler.disable();
+      setAutoBackupEnabled(false);
+    } else {
+      if (!userInfo) {
+        Alert.alert('Not signed in', 'Please sign in with Google first to enable auto-backup.');
+        return;
+      }
+      const registered = await BackupScheduler.enable();
+      await BackupScheduler.enable();
+      setAutoBackupEnabled(true);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      if (response.type === 'success') {
+        setUserInfo(response.data);
+      }
+    } catch (error: any) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // user cancelled
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        Alert.alert('Sign-in in progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert('Google Play Services not available');
+      } else {
+        Alert.alert('Sign-in error', error.message || 'Unknown error');
+      }
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    try {
+      await GoogleSignin.signOut();
+      setUserInfo(null);
+    } catch (e) {
+      Alert.alert('Sign-out error', (e as any)?.message || 'Unknown error');
+    }
+  };
   const [connecting, setConnecting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<string | null>(null);
@@ -141,16 +218,70 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSync = async () => {
-    // In production, use @react-native-google-signin/google-signin here
-    // to obtain the Google OAuth Access Token, then pass it to our Service:
-    // 
-    // const transactions = await db.getAllAsync('SELECT * FROM "Transaction"');
-    // const sheetId = await SyncService.syncTransactionsToGoogleDrive(accessToken, transactions);
+  const db = useSQLiteContext();
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreModalVisible, setRestoreModalVisible] = useState(false);
+  const [backupList, setBackupList] = useState<{ id: string; name: string; createdTime: string }[]>([]);
+  const [backupListLoading, setBackupListLoading] = useState(false);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
 
-    Alert.alert('Google Cloud Setup Required',
-      'To use this backup feature, you must create a Google Cloud Project, enable the Google Sheets API, and place your OAuth Web Client ID into the app config.'
-    );
+  // Use Google Sign-In to get access token
+  const getAccessToken = async () => {
+    if (!userInfo) {
+      Alert.alert('Not signed in', 'Please sign in with Google first.');
+      return '';
+    }
+    const tokens = await GoogleSignin.getTokens();
+    return tokens.accessToken;
+  };
+
+  const handleSync = async () => {
+    setBackupLoading(true);
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) return;
+      const spreadsheetId = await SyncService.backupAllToGoogleDrive(accessToken, db);
+      await BackupScheduler.recordBackup();
+      setLastBackupTime(new Date().toLocaleString());
+      Alert.alert('Backup Success', `Backup completed! Spreadsheet ID: ${spreadsheetId}`);
+    } catch (e: any) {
+      Alert.alert('Backup Failed', e?.message || 'Unknown error');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) return;
+      setBackupListLoading(true);
+      setRestoreModalVisible(true);
+      const files = await SyncService.listBackupSpreadsheets(accessToken);
+      setBackupList(files);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to list backups');
+      setRestoreModalVisible(false);
+    } finally {
+      setBackupListLoading(false);
+    }
+  };
+
+  const handleRestoreFromSpreadsheet = async (spreadsheetId: string) => {
+    setRestoreModalVisible(false);
+    setRestoreLoading(true);
+    try {
+      const accessToken = await getAccessToken();
+      if (!accessToken) return;
+      await SyncService.restoreAllFromGoogleDrive(accessToken, spreadsheetId, db);
+      Alert.alert('Restore Success', 'All data has been restored from backup.');
+    } catch (e: any) {
+      Alert.alert('Restore Failed', e?.message || 'Unknown error');
+    } finally {
+      setRestoreLoading(false);
+    }
   };
 
   return (
@@ -194,11 +325,83 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Cloud Back-up</Text>
-        <Text style={styles.cardDesc}>Securely sync your transactions to a Google Sheet.</Text>
-        <TouchableOpacity style={styles.btnSync} onPress={handleSync}>
-          <Text style={styles.btnSyncText}>Trigger Sync</Text>
+        <Text style={styles.cardDesc}>Securely back up and restore all your data (transactions, customers, products) to Google Sheets.</Text>
+        {userInfo ? (
+          <View style={{ marginBottom: 10 }}>
+            <Text style={{ color: '#1e293b', marginBottom: 4 }}>Signed in as: {userInfo.user.email}</Text>
+            <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#ef4444', marginBottom: 10 }]} onPress={handleGoogleSignOut}>
+              <Text style={styles.btnSyncText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#2563eb', marginBottom: 10 }]} onPress={handleGoogleSignIn} disabled={signingIn}>
+            {signingIn ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
+            <Text style={styles.btnSyncText}>{signingIn ? 'Signing In...' : 'Sign in with Google'}</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={styles.btnSync} onPress={handleSync} disabled={backupLoading || !userInfo}>
+          {backupLoading ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
+          <Text style={styles.btnSyncText}>{backupLoading ? 'Backing Up...' : 'Trigger Backup'}</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#2563eb', marginTop: 10 }]} onPress={handleRestore} disabled={restoreLoading || !userInfo}>
+          {restoreLoading ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
+          <Text style={styles.btnSyncText}>{restoreLoading ? 'Restoring...' : 'Restore from Backup'}</Text>
+        </TouchableOpacity>
+
+        {/* Auto-backup toggle */}
+        <View style={styles.autoBackupRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontWeight: '600', color: '#1e293b' }}>Daily Auto-Backup</Text>
+            <Text style={{ fontSize: 12, color: '#64748b' }}>
+              {lastBackupTime ? `Last backup: ${lastBackupTime}` : 'No backup yet'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggleBtn, autoBackupEnabled ? styles.toggleBtnOn : styles.toggleBtnOff]}
+            onPress={toggleAutoBackup}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
+              {autoBackupEnabled ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Restore Backup Picker Modal */}
+      <Modal visible={restoreModalVisible} transparent animationType="slide" onRequestClose={() => setRestoreModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.cardTitle}>Select a Backup to Restore</Text>
+            <Text style={[styles.cardDesc, { marginBottom: 10 }]}>This will overwrite all local data.</Text>
+            {backupListLoading ? (
+              <ActivityIndicator size="large" color="#10b981" style={{ marginVertical: 20 }} />
+            ) : backupList.length === 0 ? (
+              <Text style={{ color: '#64748b', textAlign: 'center', marginVertical: 20 }}>No backups found in your Google Drive.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 300 }}>
+                {backupList.map((file) => (
+                  <TouchableOpacity
+                    key={file.id}
+                    style={styles.backupItem}
+                    onPress={() => {
+                      Alert.alert('Confirm Restore', `Restore from "${file.name}"?\n\nThis will overwrite ALL local data.`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Restore', style: 'destructive', onPress: () => handleRestoreFromSpreadsheet(file.id) },
+                      ]);
+                    }}
+                  >
+                    <Text style={styles.backupItemName}>{file.name}</Text>
+                    <Text style={styles.backupItemDate}>{new Date(file.createdTime).toLocaleString()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#64748b', marginTop: 10 }]} onPress={() => setRestoreModalVisible(false)}>
+              <Text style={styles.btnSyncText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -221,5 +424,14 @@ const styles = StyleSheet.create({
   statusTextOn: { color: '#10b981' },
   statusTextOff: { color: '#94a3b8' },
   btnSync: { backgroundColor: '#10b981', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  btnSyncText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
+  btnSyncText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
+  backupItem: { backgroundColor: '#f1f5f9', padding: 14, borderRadius: 10, marginBottom: 8 },
+  backupItemName: { fontSize: 14, fontWeight: '600', color: '#1e293b' },
+  backupItemDate: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  autoBackupRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+  toggleBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  toggleBtnOn: { backgroundColor: '#10b981' },
+  toggleBtnOff: { backgroundColor: '#94a3b8' },
 });
