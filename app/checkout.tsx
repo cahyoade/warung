@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { PrinterService } from '../src/utils/PrinterService';
 
 type Customer = { id: number, name: string };
@@ -24,6 +24,10 @@ export default function CheckoutScreen() {
   const [finalizedTransactionId, setFinalizedTransactionId] = useState<number | null>(null);
   const [finalizedPoints, setFinalizedPoints] = useState<number>(0);
 
+  // Customer picker modal state
+  const [customerModalVisible, setCustomerModalVisible] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+
   // Total Profit is sum of (activeUnitPrice - costPrice) * qty
   const totalProfit = cartData.reduce((sum, item) => sum + ((item.activeUnitPrice - item.costPrice) * item.cartQty), 0);
 
@@ -32,6 +36,12 @@ export default function CheckoutScreen() {
   }, []);
 
   const change = (parseFloat(cashGiven) || 0) - totalAmount;
+
+  const selectedCustomer = customers.find(c => c.id === selectedCustomerId) ?? null;
+
+  const filteredCustomers = customers.filter(c =>
+    c.name.toLowerCase().includes(customerSearch.toLowerCase())
+  );
 
   const handleFinalize = async () => {
     if (paymentType === 'Cash' && (parseFloat(cashGiven) || 0) < totalAmount) {
@@ -125,66 +135,192 @@ export default function CheckoutScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Finalize Transaction</Text>
-      <View style={styles.summaryBox}>
-        <Text style={styles.totalLabel}>Total Due</Text>
-        <Text style={styles.totalText}>Rp {totalAmount.toLocaleString()}</Text>
-        <Text style={styles.itemCountText}>{cartData.length} items</Text>
-      </View>
+    <>
+      {/* ── Customer Picker Modal ── */}
+      <Modal
+        visible={customerModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setCustomerModalVisible(false); setCustomerSearch(''); }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior="height"
+        >
+          <View style={styles.modalSheet}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Customer</Text>
+              <TouchableOpacity onPress={() => { setCustomerModalVisible(false); setCustomerSearch(''); }}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-      <Text style={styles.label}>Customer (Optional for Cash)</Text>
-      <View style={styles.customerList}>
+            {/* Search */}
+            <View style={styles.searchContainer}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search customer…"
+                placeholderTextColor="#94a3b8"
+                value={customerSearch}
+                onChangeText={setCustomerSearch}
+                autoFocus
+              />
+              {customerSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setCustomerSearch('')}>
+                  <Text style={{ color: '#94a3b8', fontSize: 18, paddingHorizontal: 8 }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* List */}
+            <ScrollView style={styles.modalList} keyboardShouldPersistTaps="handled">
+              {/* No customer option */}
+              <TouchableOpacity
+                style={[styles.customerRow, selectedCustomerId === null && styles.customerRowActive]}
+                onPress={() => { setSelectedCustomerId(null); setCustomerModalVisible(false); setCustomerSearch(''); }}
+              >
+                <View style={[styles.customerAvatar, selectedCustomerId === null && styles.customerAvatarActive]}>
+                  <Text style={{ fontSize: 16 }}>—</Text>
+                </View>
+                <Text style={[styles.customerRowName, selectedCustomerId === null && styles.customerRowNameActive]}>
+                  No Customer
+                </Text>
+                {selectedCustomerId === null && <Text style={styles.checkMark}>✓</Text>}
+              </TouchableOpacity>
+
+              {filteredCustomers.length === 0 ? (
+                <Text style={styles.emptyText}>No customers match "{customerSearch}"</Text>
+              ) : (
+                filteredCustomers.map(c => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.customerRow, selectedCustomerId === c.id && styles.customerRowActive]}
+                    onPress={() => { setSelectedCustomerId(c.id); setCustomerModalVisible(false); setCustomerSearch(''); }}
+                  >
+                    <View style={[styles.customerAvatar, selectedCustomerId === c.id && styles.customerAvatarActive]}>
+                      <Text style={[styles.customerAvatarText, selectedCustomerId === c.id && { color: '#fff' }]}>
+                        {c.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={[styles.customerRowName, selectedCustomerId === c.id && styles.customerRowNameActive]}>
+                      {c.name}
+                    </Text>
+                    {selectedCustomerId === c.id && <Text style={styles.checkMark}>✓</Text>}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <ScrollView style={styles.container}>
+        <Text style={styles.heading}>Finalize Transaction</Text>
+        <View style={styles.summaryBox}>
+          <Text style={styles.totalLabel}>Total Due</Text>
+          <Text style={styles.totalText}>Rp {totalAmount.toLocaleString()}</Text>
+          <Text style={styles.itemCountText}>{cartData.length} items</Text>
+        </View>
+
+        {/* Customer Selector */}
+        <Text style={styles.label}>Customer (Optional for Cash)</Text>
         <TouchableOpacity
-          style={[styles.customerBtn, selectedCustomerId === null && styles.customerBtnActive]}
-          onPress={() => setSelectedCustomerId(null)}>
-          <Text style={selectedCustomerId === null ? { color: '#fff' } : {}}>No Customer</Text>
+          style={styles.customerSelector}
+          onPress={() => setCustomerModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.customerSelectorLeft}>
+            <View style={[styles.customerAvatar, selectedCustomer && styles.customerAvatarActive]}>
+              <Text style={[styles.customerAvatarText, selectedCustomer && { color: '#fff' }]}>
+                {selectedCustomer ? selectedCustomer.name.charAt(0).toUpperCase() : '—'}
+              </Text>
+            </View>
+            <Text style={styles.customerSelectorName}>
+              {selectedCustomer ? selectedCustomer.name : 'No Customer'}
+            </Text>
+          </View>
+          <Text style={styles.customerSelectorChevron}>›</Text>
         </TouchableOpacity>
-        {customers.map(c => (
-          <TouchableOpacity
-            key={c.id}
-            style={[styles.customerBtn, selectedCustomerId === c.id && styles.customerBtnActive]}
-            onPress={() => setSelectedCustomerId(c.id)}>
-            <Text style={selectedCustomerId === c.id ? { color: '#fff' } : {}}>{c.name}</Text>
+
+        <Text style={styles.label}>Payment Method</Text>
+        <View style={styles.row}>
+          <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'Cash' && styles.payMethodBtnActive]} onPress={() => setPaymentType('Cash')}>
+            <Text style={[styles.payMethodText, paymentType === 'Cash' && { color: '#fff' }]}>💰 Cash</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.label}>Payment Method</Text>
-      <View style={styles.row}>
-        <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'Cash' && styles.payMethodBtnActive]} onPress={() => setPaymentType('Cash')}>
-          <Text style={[styles.payMethodText, paymentType === 'Cash' && { color: '#fff' }]}>💰 Cash</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'PayLater' && styles.payMethodBtnActive]} onPress={() => setPaymentType('PayLater')}>
-          <Text style={[styles.payMethodText, paymentType === 'PayLater' && { color: '#fff' }]}>📘 Pay Later</Text>
-        </TouchableOpacity>
-      </View>
-
-      {paymentType === 'Cash' && (
-        <View style={styles.cashSection}>
-          <Text style={styles.label}>Cash Given by Customer</Text>
-          <TextInput
-            style={styles.input}
-            keyboardType="numeric"
-            placeholder="Rp"
-            value={cashGiven}
-            onChangeText={setCashGiven}
-          />
-          {change > 0 && <Text style={styles.changeText}>Change to return: Rp {change.toLocaleString()}</Text>}
+          <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'PayLater' && styles.payMethodBtnActive]} onPress={() => setPaymentType('PayLater')}>
+            <Text style={[styles.payMethodText, paymentType === 'PayLater' && { color: '#fff' }]}>📘 Pay Later</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {paymentType === 'PayLater' && (
-        <View style={styles.payLaterWarning}>
-          <Text style={{ color: '#c2410c' }}>This transaction will be recorded as Debt for the selected customer.</Text>
-        </View>
-      )}
+        {paymentType === 'Cash' && (
+          <View style={styles.cashSection}>
+            <Text style={styles.label}>Cash Given by Customer</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              placeholder="Rp"
+              value={cashGiven}
+              onChangeText={setCashGiven}
+            />
 
-      <TouchableOpacity style={styles.finalizeBtn} onPress={handleFinalize}>
-        <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
-      </TouchableOpacity>
-      <View style={{ height: 100 }} />
-    </ScrollView>
+            {/* Denomination shortcuts */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.denomRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Clear button */}
+              <TouchableOpacity
+                style={[styles.denomChip, styles.denomChipClear]}
+                onPress={() => setCashGiven('')}
+              >
+                <Text style={[styles.denomChipText, styles.denomChipTextClear]}>⌫</Text>
+              </TouchableOpacity>
+
+              {/* Exact button */}
+              <TouchableOpacity
+                style={[styles.denomChip, styles.denomChipExact]}
+                onPress={() => setCashGiven(String(totalAmount))}
+              >
+                <Text style={[styles.denomChipText, styles.denomChipTextExact]}>Exact</Text>
+              </TouchableOpacity>
+
+              {[1000, 2000, 5000, 10000, 20000, 50000, 100000].map(denom => {
+                const label = denom >= 1000 ? `+${denom / 1000}k` : `+${denom}`;
+                return (
+                  <TouchableOpacity
+                    key={denom}
+                    style={styles.denomChip}
+                    onPress={() => {
+                      const current = parseFloat(cashGiven) || 0;
+                      setCashGiven(String(current + denom));
+                    }}
+                  >
+                    <Text style={styles.denomChipText}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {change > 0 && <Text style={styles.changeText}>Change to return: Rp {change.toLocaleString()}</Text>}
+          </View>
+        )}
+
+        {paymentType === 'PayLater' && (
+          <View style={styles.payLaterWarning}>
+            <Text style={{ color: '#c2410c' }}>This transaction will be recorded as Debt for the selected customer.</Text>
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.finalizeBtn} onPress={handleFinalize}>
+          <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
+        </TouchableOpacity>
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </>
   );
 }
 
@@ -196,15 +332,123 @@ const styles = StyleSheet.create({
   totalText: { color: '#10b981', fontSize: 32, fontWeight: '900' },
   itemCountText: { color: '#94a3b8', marginTop: 5 },
   label: { fontSize: 16, fontWeight: 'bold', color: '#334155', marginBottom: 10 },
-  customerList: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
-  customerBtn: { paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#e2e8f0', borderRadius: 20, marginRight: 10, marginBottom: 10 },
-  customerBtnActive: { backgroundColor: '#0ea5e9' },
+
+  // Customer selector button
+  customerSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 24,
+  },
+  customerSelectorLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  customerSelectorName: { fontSize: 16, fontWeight: '600', color: '#1e293b' },
+  customerSelectorChevron: { fontSize: 26, color: '#94a3b8', lineHeight: 28 },
+
+  // Shared avatar
+  customerAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customerAvatarActive: { backgroundColor: '#0ea5e9' },
+  customerAvatarText: { fontSize: 16, fontWeight: '700', color: '#475569' },
+
+  // Modal overlay
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
+  modalClose: { fontSize: 20, color: '#64748b', padding: 4 },
+
+  // Search bar inside modal
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 12,
+  },
+  searchIcon: { fontSize: 16, marginRight: 6 },
+  searchInput: { flex: 1, height: 44, fontSize: 16, color: '#1e293b' },
+
+  modalList: { flexShrink: 1 },
+
+  // Rows inside modal
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    gap: 12,
+  },
+  customerRowActive: { backgroundColor: '#f0f9ff' },
+  customerRowName: { flex: 1, fontSize: 16, color: '#334155', fontWeight: '500' },
+  customerRowNameActive: { color: '#0ea5e9', fontWeight: '700' },
+  checkMark: { fontSize: 18, color: '#0ea5e9', fontWeight: '700' },
+  emptyText: { textAlign: 'center', color: '#94a3b8', padding: 30, fontSize: 15 },
+
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   payMethodBtn: { flex: 1, padding: 15, backgroundColor: '#e2e8f0', borderRadius: 10, alignItems: 'center', marginHorizontal: 5 },
   payMethodBtnActive: { backgroundColor: '#10b981' },
   payMethodText: { fontWeight: 'bold', fontSize: 16 },
   cashSection: { marginBottom: 20 },
   input: { backgroundColor: '#fff', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', fontSize: 20, fontWeight: 'bold' },
+
+  // Denomination shortcuts
+  denomRow: { flexDirection: 'row', marginTop: 12, marginBottom: 4 },
+  denomChip: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 8,
+    minWidth: 56,
+  },
+  denomChipExact: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#6ee7b7',
+  },
+  denomChipClear: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+  },
+  denomChipText: { fontSize: 14, fontWeight: '700', color: '#334155' },
+  denomChipTextExact: { color: '#059669' },
+  denomChipTextClear: { color: '#e11d48' },
+
   changeText: { marginTop: 10, color: '#0ea5e9', fontSize: 16, fontWeight: 'bold' },
   payLaterWarning: { backgroundColor: '#ffedd5', padding: 15, borderRadius: 10, marginBottom: 20 },
   finalizeBtn: { backgroundColor: '#0f172a', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
@@ -212,4 +456,3 @@ const styles = StyleSheet.create({
   printBtn: { backgroundColor: '#3b82f6', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   printBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 20 }
 });
-
