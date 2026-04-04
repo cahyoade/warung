@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTranslation } from '../src/i18n/LanguageContext';
 import { PrinterService } from '../src/utils/PrinterService';
 
@@ -27,12 +27,37 @@ export default function CheckoutScreen() {
   const [finalizedPoints, setFinalizedPoints] = useState<number>(0);
   const [finalizedTotalPoints, setFinalizedTotalPoints] = useState<number>(0);
 
+  // Debt payment state
+  const [customerDebt, setCustomerDebt] = useState<number>(0);
+  const [includeDebtPayment, setIncludeDebtPayment] = useState(false);
+  const [debtPaymentAmount, setDebtPaymentAmount] = useState('');
+  const [finalizedDebtPayment, setFinalizedDebtPayment] = useState<number>(0);
+
   // Customer picker modal state
   const [customerModalVisible, setCustomerModalVisible] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
 
   const refreshCustomers = () => {
     db.getAllAsync<Customer>('SELECT id, name FROM Customer').then(setCustomers);
+  };
+
+  const fetchCustomerDebt = async (custId: number | null) => {
+    if (!custId) {
+      setCustomerDebt(0);
+      setIncludeDebtPayment(false);
+      setDebtPaymentAmount('');
+      return;
+    }
+    const row = await db.getFirstAsync<{ debt: number }>(
+      `SELECT COALESCE(SUM(totalAmount - cashGiven), 0) as debt FROM "Transaction" WHERE customerId = ? AND paymentStatus = 'Unpaid' AND isVoided = 0`,
+      [custId]
+    );
+    const debt = row?.debt ?? 0;
+    setCustomerDebt(debt);
+    if (debt <= 0) {
+      setIncludeDebtPayment(false);
+      setDebtPaymentAmount('');
+    }
   };
 
   // Total Profit is sum of (activeUnitPrice - costPrice) * qty
@@ -42,9 +67,15 @@ export default function CheckoutScreen() {
     db.getAllAsync<Customer>('SELECT id, name FROM Customer').then(setCustomers);
   }, []);
 
+  useEffect(() => {
+    fetchCustomerDebt(selectedCustomerId);
+  }, [selectedCustomerId]);
+
   const cashGivenNum = parseFloat(cashGiven) || 0;
+  const debtPayNum = includeDebtPayment ? (parseFloat(debtPaymentAmount) || 0) : 0;
+  const totalWithDebt = totalAmount + debtPayNum;
   const cashShortfall = paymentType === 'Cash' ? Math.max(0, totalAmount - cashGivenNum) : 0;
-  const change = cashGivenNum - totalAmount;
+  const change = cashGivenNum - totalWithDebt;
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId) ?? null;
 
@@ -59,6 +90,18 @@ export default function CheckoutScreen() {
     }
     if (paymentType === 'PayLater' && !selectedCustomerId) {
       Alert.alert(t('common.error'), t('checkout.errorCustomer'));
+      return;
+    }
+    if (includeDebtPayment && debtPayNum <= 0) {
+      Alert.alert(t('common.error'), t('checkout.errorDebtAmount'));
+      return;
+    }
+    if (includeDebtPayment && debtPayNum > customerDebt) {
+      Alert.alert(t('common.error'), t('checkout.errorDebtExceed'));
+      return;
+    }
+    if (includeDebtPayment && paymentType === 'Cash' && cashGivenNum < totalWithDebt) {
+      Alert.alert(t('common.error'), t('checkout.errorCashDebt'));
       return;
     }
 
@@ -98,6 +141,46 @@ export default function CheckoutScreen() {
         );
       }
 
+      // 3b. Process debt payment if included
+      let debtPointsAwarded = 0;
+      if (includeDebtPayment && debtPayNum > 0 && selectedCustomerId) {
+        debtPointsAwarded = Math.floor(debtPayNum / 20000);
+
+        // Distribute payment across unpaid transactions
+        const unpaidTxns = await db.getAllAsync<{ id: number, totalAmount: number, cashGiven: number }>(
+          `SELECT id, totalAmount, cashGiven FROM "Transaction" WHERE customerId = ? AND paymentStatus = 'Unpaid' AND isVoided = 0 ORDER BY date ASC`,
+          [selectedCustomerId]
+        );
+
+        let remainingPayment = debtPayNum;
+        for (const txn of unpaidTxns) {
+          if (remainingPayment <= 0) break;
+          const txnOwes = txn.totalAmount - txn.cashGiven;
+          const applyToTxn = Math.min(txnOwes, remainingPayment);
+          const newCashGiven = txn.cashGiven + applyToTxn;
+          const newStatus = newCashGiven >= txn.totalAmount ? 'Paid' : 'Unpaid';
+          await db.runAsync(
+            'UPDATE "Transaction" SET cashGiven = ?, paymentStatus = ? WHERE id = ?',
+            [newCashGiven, newStatus, txn.id]
+          );
+          remainingPayment -= applyToTxn;
+        }
+
+        // Insert DebtSettlement record
+        await db.runAsync(
+          'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId, isVoided) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [dateStr, debtPayNum, 0, debtPayNum, 'DebtSettlement', selectedCustomerId, 0]
+        );
+
+        // Award debt payment points
+        if (debtPointsAwarded > 0) {
+          await db.runAsync(
+            'UPDATE Customer SET accumulatedPoints = accumulatedPoints + ? WHERE id = ?',
+            [debtPointsAwarded, selectedCustomerId]
+          );
+        }
+      }
+
       // Fetch updated points balance for the customer
       let totalPoints = 0;
       if (selectedCustomerId) {
@@ -109,15 +192,18 @@ export default function CheckoutScreen() {
       }
 
       setFinalizedTransactionId(transactionId);
-      setFinalizedPoints(pointsAwarded);
+      setFinalizedPoints(pointsAwarded + debtPointsAwarded);
       setFinalizedTotalPoints(totalPoints);
+      setFinalizedDebtPayment(debtPayNum);
 
       const debtAmount = paymentType === 'Cash' ? Math.max(0, totalAmount - cashGivenNum) : totalAmount;
       const debtMsg = debtAmount > 0 && selectedCustomerId
         ? `\n${t('checkout.debtAdded', { amount: debtAmount.toLocaleString() })}`
         : '';
-      const pointsMsg = selectedCustomerId && pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : '';
-      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsMsg}${debtMsg}`);
+      const totalPtsAwarded = pointsAwarded + debtPointsAwarded;
+      const pointsMsg = selectedCustomerId && totalPtsAwarded > 0 ? ` ${totalPtsAwarded} pts.` : '';
+      const debtPayMsg = debtPayNum > 0 ? `\n${t('checkout.debtPaid', { amount: debtPayNum.toLocaleString() })}` : '';
+      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsMsg}${debtMsg}${debtPayMsg}`);
 
     } catch (e) {
       console.error(e);
@@ -127,11 +213,15 @@ export default function CheckoutScreen() {
 
   const handlePrint = async () => {
     if (finalizedTransactionId === null) return;
-    const actualCash = paymentType === 'Cash' ? totalAmount : 0;
+    const actualCash = paymentType === 'Cash' ? totalWithDebt : 0;
+    const receiptItems = cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice }));
+    if (finalizedDebtPayment > 0) {
+      receiptItems.push({ name: 'Pembayaran Hutang', qty: 1, subtotal: finalizedDebtPayment });
+    }
     const printed = await PrinterService.printReceipt({
       transactionId: finalizedTransactionId,
-      items: cartData.map(c => ({ name: c.name, qty: c.cartQty, subtotal: c.cartQty * c.activeUnitPrice })),
-      total: totalAmount,
+      items: receiptItems,
+      total: totalAmount + finalizedDebtPayment,
       cashGiven: actualCash,
       customerName: customers.find(c => c.id === selectedCustomerId)?.name,
       pointsEarned: finalizedPoints,
@@ -256,7 +346,12 @@ export default function CheckoutScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <ScrollView style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>{t('checkout.title')}</Text>
         <View style={styles.summaryBox}>
           <Text style={styles.totalLabel}>{t('checkout.totalDue')}</Text>
@@ -323,7 +418,7 @@ export default function CheckoutScreen() {
               {/* Exact button */}
               <TouchableOpacity
                 style={[styles.denomChip, styles.denomChipExact]}
-                onPress={() => setCashGiven(String(totalAmount))}
+                onPress={() => setCashGiven(String(totalWithDebt))}
               >
                 <Text style={[styles.denomChipText, styles.denomChipTextExact]}>{t('checkout.exact')}</Text>
               </TouchableOpacity>
@@ -355,6 +450,55 @@ export default function CheckoutScreen() {
           </View>
         )}
 
+        {/* Debt Payment Option */}
+        {paymentType === 'Cash' && selectedCustomerId && customerDebt > 0 && (
+          <View style={styles.debtPaymentSection}>
+            <TouchableOpacity
+              style={styles.debtPaymentToggle}
+              onPress={() => {
+                setIncludeDebtPayment(!includeDebtPayment);
+                if (!includeDebtPayment) setDebtPaymentAmount(String(customerDebt));
+                else setDebtPaymentAmount('');
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.debtCheckbox, includeDebtPayment && styles.debtCheckboxActive]}>
+                {includeDebtPayment && <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>✓</Text>}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.debtPaymentLabel}>{t('checkout.includeDebtPayment')}</Text>
+                <Text style={styles.debtPaymentHint}>{t('checkout.customerOwes', { amount: customerDebt.toLocaleString() })}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {includeDebtPayment && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.label}>{t('checkout.debtPaymentAmount')}</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  placeholder="Rp"
+                  value={debtPaymentAmount}
+                  onChangeText={setDebtPaymentAmount}
+                />
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.denomChip, styles.denomChipExact]}
+                    onPress={() => setDebtPaymentAmount(String(customerDebt))}
+                  >
+                    <Text style={[styles.denomChipText, styles.denomChipTextExact]}>{t('checkout.payAll')}</Text>
+                  </TouchableOpacity>
+                </View>
+                {debtPayNum > 0 && (
+                  <Text style={[styles.debtText, { marginTop: 8 }]}>
+                    {t('checkout.totalWithDebt', { amount: totalWithDebt.toLocaleString() })}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         {paymentType === 'PayLater' && (
           <View style={styles.payLaterWarning}>
             <Text style={{ color: '#c2410c' }}>{t('checkout.payLaterWarning')}</Text>
@@ -366,6 +510,7 @@ export default function CheckoutScreen() {
         </TouchableOpacity>
         <View style={{ height: 100 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -513,6 +658,43 @@ const styles = StyleSheet.create({
   debtText: { marginTop: 10, color: '#d97706', fontSize: 15, fontWeight: '600' },
   debtWarningText: { marginTop: 10, color: '#dc2626', fontSize: 14, fontWeight: '600' },
   payLaterWarning: { backgroundColor: '#ffedd5', padding: 15, borderRadius: 10, marginBottom: 20 },
+  debtPaymentSection: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  debtPaymentToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  debtCheckbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#d97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  debtCheckboxActive: {
+    backgroundColor: '#d97706',
+    borderColor: '#d97706',
+  },
+  debtPaymentLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  debtPaymentHint: {
+    fontSize: 13,
+    color: '#b45309',
+    marginTop: 2,
+  },
   finalizeBtn: { backgroundColor: '#0f172a', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   finalizeBtnText: { color: '#f8fafc', fontWeight: 'bold', fontSize: 20 },
   printBtn: { backgroundColor: '#3b82f6', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },

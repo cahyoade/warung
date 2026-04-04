@@ -19,7 +19,7 @@ export default function AddCustomerScreen() {
     }
 
     try {
-      await db.runAsync('INSERT INTO Customer (name, phone) VALUES (?, ?)', [name, phone]);
+      await db.runAsync('INSERT INTO Customer (name, phone) VALUES (?, ?)', [name, phone.trim() || null]);
       router.back();
     } catch (e) {
       Alert.alert(t('common.error'), t('addCustomer.errorSave'));

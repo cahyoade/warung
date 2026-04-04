@@ -20,6 +20,8 @@ export default function SettleDebtScreen() {
   const [unpaidTransactions, setUnpaidTransactions] = useState<Transaction[]>([]);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [totalDebt, setTotalDebt] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [finalized, setFinalized] = useState<{ settledAmount: number, cashGiven: number, pointsAwarded: number } | null>(null);
 
   useEffect(() => {
     if (isNaN(customerId)) return;
@@ -62,14 +64,11 @@ export default function SettleDebtScreen() {
       return;
     }
 
-    if (amount > totalDebt) {
-      Alert.alert(t('common.error'), t('settleDebt.errorExceed'));
-      return;
-    }
-
+    setIsProcessing(true);
     try {
-      let remainingPayment = amount;
-      let pointsAwarded = Math.floor(amount / 20000); // 1 point per 20k
+      const settledAmount = Math.min(amount, totalDebt);
+      let remainingPayment = settledAmount;
+      let pointsAwarded = Math.floor(settledAmount / 20000); // 1 point per 20k
 
       await db.withTransactionAsync(async () => {
         // 1. Distribute payment across transactions
@@ -94,7 +93,7 @@ export default function SettleDebtScreen() {
         const dateStr = new Date().toISOString();
         await db.runAsync(
           'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId, isVoided) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [dateStr, amount, 0, amount, 'DebtSettlement', customerId, 0]
+          [dateStr, settledAmount, 0, settledAmount, 'DebtSettlement', customerId, 0]
         );
 
         // 3. Award Points
@@ -106,30 +105,54 @@ export default function SettleDebtScreen() {
         }
       });
 
-      // 4. Print Receipt
-      const printed = await PrinterService.printReceipt({
-        transactionId: 0, // indicates special receipt or you can omit
-        items: [{ name: 'Debt Settlement', qty: 1, subtotal: amount }],
-        total: amount,
-        cashGiven: amount,
-        customerName: customer?.name,
-        pointsEarned: pointsAwarded,
-      });
-
-      if (!printed) {
-        Alert.alert(t('common.warning'), t('settleDebt.warning'));
-      } else {
-        Alert.alert(t('common.success'), t('settleDebt.success', { points: pointsAwarded }));
-      }
-
-      router.replace('/(tabs)/customers');
+      setFinalized({ settledAmount, cashGiven: amount, pointsAwarded });
     } catch (error) {
       console.error(error);
       Alert.alert(t('common.error'), t('settleDebt.error'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!finalized) return;
+    const printed = await PrinterService.printReceipt({
+      transactionId: 0,
+      items: [{ name: 'Pembayaran Hutang', qty: 1, subtotal: finalized.settledAmount }],
+      total: finalized.settledAmount,
+      cashGiven: finalized.cashGiven,
+      customerName: customer?.name,
+      pointsEarned: finalized.pointsAwarded,
+    });
+    if (!printed) {
+      Alert.alert(t('common.error'), t('settleDebt.printError'));
     }
   };
 
   if (!customer) return null;
+
+  if (finalized) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.heading}>{t('settleDebt.successTitle')}</Text>
+        <Text style={styles.totalText}>Rp {finalized.settledAmount.toLocaleString()}</Text>
+        {finalized.pointsAwarded > 0 && (
+          <Text style={styles.hint}>{t('settleDebt.success', { points: finalized.pointsAwarded })}</Text>
+        )}
+        {finalized.cashGiven > finalized.settledAmount && (
+          <Text style={styles.changeText}>{t('settleDebt.changeToReturn', { amount: (finalized.cashGiven - finalized.settledAmount).toLocaleString() })}</Text>
+        )}
+        <View style={{ marginTop: 40, width: '100%' }}>
+          <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
+            <Text style={styles.printBtnText}>{t('settleDebt.printReceipt')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.settleBtn, { backgroundColor: '#64748b', marginTop: 12 }]} onPress={() => router.replace('/(tabs)/customers')}>
+            <Text style={styles.settleBtnText}>{t('settleDebt.done')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -180,14 +203,17 @@ export default function SettleDebtScreen() {
           placeholder={t('settleDebt.enterAmount')}
         />
         <Text style={styles.hint}>{t('settleDebt.pointHint')}</Text>
+        {(parseFloat(paymentAmount) || 0) > totalDebt && totalDebt > 0 && (
+          <Text style={styles.changeText}>{t('settleDebt.changeToReturn', { amount: ((parseFloat(paymentAmount) || 0) - totalDebt).toLocaleString() })}</Text>
+        )}
       </View>
 
       <TouchableOpacity 
-        style={[styles.settleBtn, unpaidTransactions.length === 0 && { backgroundColor: '#cbd5e1' }]} 
+        style={[styles.settleBtn, (unpaidTransactions.length === 0 || isProcessing) && { backgroundColor: '#cbd5e1' }]} 
         onPress={handleSettle}
-        disabled={unpaidTransactions.length === 0}
+        disabled={unpaidTransactions.length === 0 || isProcessing}
       >
-        <Text style={styles.settleBtnText}>{t('settleDebt.submitPayment')}</Text>
+        <Text style={styles.settleBtnText}>{isProcessing ? t('settleDebt.processing') : t('settleDebt.submitPayment')}</Text>
       </TouchableOpacity>
       <View style={{ height: 50 }} />
     </ScrollView>
@@ -215,6 +241,9 @@ const styles = StyleSheet.create({
   inputSection: { marginBottom: 30 },
   input: { backgroundColor: '#fff', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', fontSize: 20, fontWeight: 'bold' },
   hint: { color: '#64748b', fontSize: 12, marginTop: 8 },
+  changeText: { color: '#10b981', fontWeight: 'bold', fontSize: 16, marginTop: 10 },
   settleBtn: { backgroundColor: '#10b981', padding: 20, borderRadius: 12, alignItems: 'center' },
-  settleBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
+  settleBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  printBtn: { backgroundColor: '#3b82f6', padding: 20, borderRadius: 12, alignItems: 'center' },
+  printBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
 });
