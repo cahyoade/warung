@@ -43,6 +43,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'customers.owes': 'Owes Rp {amount}',
     'customers.noDebt': 'No Debt',
     'customers.pts': 'pts',
+    'customers.searchCustomers': 'Search customers...',
+    'customers.settleDebt': 'Settle Debt',
 
     // Reports
     'reports.title': 'Reports & History',
@@ -203,7 +205,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'redeemPoints.errorExceed': 'Cannot redeem more points than available.',
     'redeemPoints.success': 'Successfully redeemed {points} pts!',
     'redeemPoints.error': 'Failed to redeem points.',
-    'customers.redeem': 'Redeem',
+    'customers.redeem': 'Redeem Points',
 
     // Common
     'common.error': 'Error',
@@ -254,6 +256,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'customers.owes': 'Utang Rp {amount}',
     'customers.noDebt': 'Tidak Ada Utang',
     'customers.pts': 'poin',
+    'customers.searchCustomers': 'Cari pelanggan...',
+    'customers.settleDebt': 'Lunasi Utang',
 
     // Reports
     'reports.title': 'Laporan & Riwayat',
@@ -414,7 +418,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'redeemPoints.errorExceed': 'Tidak bisa menukar lebih dari poin yang tersedia.',
     'redeemPoints.success': 'Berhasil menukar {points} poin!',
     'redeemPoints.error': 'Gagal menukar poin.',
-    'customers.redeem': 'Tukar',
+    'customers.redeem': 'Tukar poin',
 
     // Common
     'common.error': 'Error',

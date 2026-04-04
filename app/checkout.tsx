@@ -68,7 +68,7 @@ export default function CheckoutScreen() {
       const actualCash = paymentType === 'Cash' ? cashGivenNum : 0;
       const isFullyPaid = paymentType === 'Cash' && cashGivenNum >= totalAmount;
       const status = isFullyPaid ? 'Paid' : 'Unpaid';
-      const pointsAwarded = isFullyPaid ? Math.floor(totalAmount / 20000) : 0; // points only for fully paid
+      const pointsAwarded = selectedCustomerId && isFullyPaid ? Math.floor(totalAmount / 20000) : 0; // points only for fully paid with customer
 
       const res = await db.runAsync(
         'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId) VALUES (?, ?, ?, ?, ?, ?)',
@@ -116,7 +116,8 @@ export default function CheckoutScreen() {
       const debtMsg = debtAmount > 0 && selectedCustomerId
         ? `\n${t('checkout.debtAdded', { amount: debtAmount.toLocaleString() })}`
         : '';
-      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : ''}${debtMsg}`);
+      const pointsMsg = selectedCustomerId && pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : '';
+      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsMsg}${debtMsg}`);
 
     } catch (e) {
       console.error(e);

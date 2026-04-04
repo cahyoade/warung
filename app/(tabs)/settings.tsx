@@ -287,28 +287,8 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <Text style={styles.title}>{t('settings.title')}</Text>
-
-      {/* Language Setting */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('settings.language')}</Text>
-        <Text style={styles.cardDesc}>{t('settings.languageDesc')}</Text>
-        <View style={styles.langRow}>
-          <TouchableOpacity
-            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-            onPress={() => setLanguage('en')}
-          >
-            <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>{t('settings.english')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.langBtn, language === 'id' && styles.langBtnActive]}
-            onPress={() => setLanguage('id')}
-          >
-            <Text style={[styles.langBtnText, language === 'id' && styles.langBtnTextActive]}>{t('settings.indonesian')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('settings.printer')}</Text>
@@ -389,6 +369,26 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Language Setting */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('settings.language')}</Text>
+        <Text style={styles.cardDesc}>{t('settings.languageDesc')}</Text>
+        <View style={styles.langRow}>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+            onPress={() => setLanguage('en')}
+          >
+            <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>{t('settings.english')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'id' && styles.langBtnActive]}
+            onPress={() => setLanguage('id')}
+          >
+            <Text style={[styles.langBtnText, language === 'id' && styles.langBtnTextActive]}>{t('settings.indonesian')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Restore Backup Picker Modal */}
       <Modal visible={restoreModalVisible} transparent animationType="slide" onRequestClose={() => setRestoreModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -429,7 +429,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60, paddingBottom: 60, backgroundColor: '#fcfcfc' },
+  container: { flex: 1, padding: 20, paddingTop: 60, paddingBottom: 120, backgroundColor: '#fcfcfc' },
   title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 20 },
   card: { backgroundColor: '#fff', padding: 20, borderRadius: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
