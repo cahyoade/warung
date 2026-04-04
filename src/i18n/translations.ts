@@ -138,6 +138,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'checkout.errorCustomer': 'You must select a customer for a Pay Later transaction.',
     'checkout.errorFinalize': 'Failed to finalize transaction',
     'checkout.printError': 'Receipt could not be printed. Please check printer connection.',
+    'checkout.includeDebtPayment': 'Include debt payment',
+    'checkout.customerOwes': 'Customer owes Rp {amount}',
+    'checkout.debtPaymentAmount': 'Debt Payment Amount',
+    'checkout.payAll': 'Pay All',
+    'checkout.totalWithDebt': 'Total incl. debt payment: Rp {amount}',
+    'checkout.debtPaid': 'Rp {amount} debt paid.',
+    'checkout.errorDebtAmount': 'Please enter a valid debt payment amount.',
+    'checkout.errorDebtExceed': 'Debt payment cannot exceed total debt.',
+    'checkout.errorCashDebt': 'Cash given is not enough to cover items and debt payment.',
 
     // Add Product
     'addProduct.addTitle': 'Add New Good',
@@ -351,6 +360,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'checkout.errorCustomer': 'Anda harus memilih pelanggan untuk transaksi Bayar Nanti.',
     'checkout.errorFinalize': 'Gagal menyelesaikan transaksi',
     'checkout.printError': 'Struk tidak bisa dicetak. Periksa koneksi printer.',
+    'checkout.includeDebtPayment': 'Sertakan pembayaran hutang',
+    'checkout.customerOwes': 'Pelanggan berhutang Rp {amount}',
+    'checkout.debtPaymentAmount': 'Jumlah Pembayaran Hutang',
+    'checkout.payAll': 'Bayar Semua',
+    'checkout.totalWithDebt': 'Total termasuk hutang: Rp {amount}',
+    'checkout.debtPaid': 'Rp {amount} hutang dibayar.',
+    'checkout.errorDebtAmount': 'Masukkan jumlah pembayaran hutang yang valid.',
+    'checkout.errorDebtExceed': 'Pembayaran hutang tidak boleh melebihi total hutang.',
+    'checkout.errorCashDebt': 'Uang yang diberikan tidak cukup untuk item dan pembayaran hutang.',
 
     // Add Product
     'addProduct.addTitle': 'Tambah Barang Baru',

@@ -109,7 +109,7 @@ export default function SettleDebtScreen() {
       // 4. Print Receipt
       const printed = await PrinterService.printReceipt({
         transactionId: 0, // indicates special receipt or you can omit
-        items: [{ name: 'Debt Settlement', qty: 1, subtotal: amount }],
+        items: [{ name: 'Pembayaran Hutang', qty: 1, subtotal: amount }],
         total: amount,
         cashGiven: amount,
         customerName: customer?.name,
