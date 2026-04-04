@@ -1,14 +1,16 @@
-import { StyleSheet, Text, View, FlatList, TouchableOpacity } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useCallback, useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../../src/i18n/LanguageContext';
 
 type Customer = { id: number, name: string, phone: string, totalDebt: number, accumulatedPoints: number };
 
 export default function CustomersScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { t } = useTranslation();
   const [customers, setCustomers] = useState<Customer[]>([]);
 
   async function fetchCustomers() {
@@ -33,17 +35,17 @@ export default function CustomersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Customers & Debt</Text>
+        <Text style={styles.title}>{t('customers.title')}</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-customer')}>
             <Ionicons name="add" size={24} color="#fff" />
-            <Text style={styles.addButtonText}>Add</Text>
+            <Text style={styles.addButtonText}>{t('customers.add')}</Text>
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={customers}
         keyExtractor={(item) => item.id.toString()}
-        ListEmptyComponent={<Text style={styles.emptyText}>No customers registered yet!</Text>}
+        ListEmptyComponent={<Text style={styles.emptyText}>{t('customers.noCustomers')}</Text>}
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={styles.row}
@@ -51,11 +53,11 @@ export default function CustomersScreen() {
           >
             <View>
                 <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.phone}>{item.phone} • {item.accumulatedPoints} pts</Text>
+                <Text style={styles.phone}>{item.phone} • {item.accumulatedPoints} {t('customers.pts')}</Text>
             </View>
             <View style={[styles.debtBadge, item.totalDebt > 0 ? styles.activeDebt : null]}>
                 <Text style={[styles.debtText, item.totalDebt > 0 ? styles.activeDebtText : null]}>
-                  {item.totalDebt > 0 ? `Owes Rp ${item.totalDebt.toLocaleString()}` : 'No Debt'}
+                  {item.totalDebt > 0 ? t('customers.owes', { amount: item.totalDebt.toLocaleString() }) : t('customers.noDebt')}
                 </Text>
             </View>
           </TouchableOpacity>

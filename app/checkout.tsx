@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../src/i18n/LanguageContext';
 import { PrinterService } from '../src/utils/PrinterService';
 
 type Customer = { id: number, name: string };
@@ -11,6 +12,7 @@ export default function CheckoutScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { t } = useTranslation();
 
   const cartData: CartItem[] = params.cartData ? JSON.parse(params.cartData as string) : [];
   const totalAmount = parseFloat(params.totalAmount as string) || 0;
@@ -45,11 +47,11 @@ export default function CheckoutScreen() {
 
   const handleFinalize = async () => {
     if (paymentType === 'Cash' && (parseFloat(cashGiven) || 0) < totalAmount) {
-      Alert.alert('Error', 'Cash given is less than the total amount.');
+      Alert.alert(t('common.error'), t('checkout.errorCash'));
       return;
     }
     if (paymentType === 'PayLater' && !selectedCustomerId) {
-      Alert.alert('Error', 'You must select a customer for a Pay Later transaction.');
+      Alert.alert(t('common.error'), t('checkout.errorCustomer'));
       return;
     }
 
@@ -90,11 +92,11 @@ export default function CheckoutScreen() {
 
       setFinalizedTransactionId(transactionId);
       setFinalizedPoints(pointsAwarded);
-      Alert.alert('Success', `Transaction finalized!${pointsAwarded > 0 ? ` Gave ${pointsAwarded} pts.` : ''}`);
+      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : ''}`);
 
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to finalize transaction');
+      Alert.alert(t('common.error'), t('checkout.errorFinalize'));
     }
   };
 
@@ -111,23 +113,23 @@ export default function CheckoutScreen() {
     });
 
     if (!printed) {
-      Alert.alert('Error', 'Receipt could not be printed. Please check printer connection.');
+      Alert.alert(t('common.error'), t('checkout.printError'));
     }
   };
 
   if (finalizedTransactionId !== null) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.heading}>Transaction Successful! 🎉</Text>
-        <Text style={styles.totalText}>Transaction #{finalizedTransactionId}</Text>
+        <Text style={styles.heading}>{t('checkout.success')}</Text>
+        <Text style={styles.totalText}>{t('checkout.transactionNum', { id: finalizedTransactionId })}</Text>
 
         <View style={{ marginTop: 40, width: '100%' }}>
           <TouchableOpacity style={styles.printBtn} onPress={handlePrint}>
-            <Text style={styles.printBtnText}>🖨️ Print Receipt</Text>
+            <Text style={styles.printBtnText}>{t('checkout.printReceipt')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.finalizeBtn, { backgroundColor: '#64748b' }]} onPress={() => router.replace('/(tabs)')}>
-            <Text style={styles.finalizeBtnText}>Done</Text>
+            <Text style={styles.finalizeBtnText}>{t('checkout.done')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -150,7 +152,7 @@ export default function CheckoutScreen() {
           <View style={styles.modalSheet}>
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Customer</Text>
+              <Text style={styles.modalTitle}>{t('checkout.selectCustomer')}</Text>
               <TouchableOpacity onPress={() => { setCustomerModalVisible(false); setCustomerSearch(''); }}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
@@ -161,7 +163,7 @@ export default function CheckoutScreen() {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search customer…"
+                placeholder={t('checkout.searchCustomer')}
                 placeholderTextColor="#94a3b8"
                 value={customerSearch}
                 onChangeText={setCustomerSearch}
@@ -185,13 +187,13 @@ export default function CheckoutScreen() {
                   <Text style={{ fontSize: 16 }}>—</Text>
                 </View>
                 <Text style={[styles.customerRowName, selectedCustomerId === null && styles.customerRowNameActive]}>
-                  No Customer
+                  {t('checkout.noCustomer')}
                 </Text>
                 {selectedCustomerId === null && <Text style={styles.checkMark}>✓</Text>}
               </TouchableOpacity>
 
               {filteredCustomers.length === 0 ? (
-                <Text style={styles.emptyText}>No customers match "{customerSearch}"</Text>
+                <Text style={styles.emptyText}>{t('checkout.noMatch', { query: customerSearch })}</Text>
               ) : (
                 filteredCustomers.map(c => (
                   <TouchableOpacity
@@ -217,15 +219,15 @@ export default function CheckoutScreen() {
       </Modal>
 
       <ScrollView style={styles.container}>
-        <Text style={styles.heading}>Finalize Transaction</Text>
+        <Text style={styles.heading}>{t('checkout.title')}</Text>
         <View style={styles.summaryBox}>
-          <Text style={styles.totalLabel}>Total Due</Text>
+          <Text style={styles.totalLabel}>{t('checkout.totalDue')}</Text>
           <Text style={styles.totalText}>Rp {totalAmount.toLocaleString()}</Text>
-          <Text style={styles.itemCountText}>{cartData.length} items</Text>
+          <Text style={styles.itemCountText}>{t('checkout.items', { count: cartData.length })}</Text>
         </View>
 
         {/* Customer Selector */}
-        <Text style={styles.label}>Customer (Optional for Cash)</Text>
+        <Text style={styles.label}>{t('checkout.customerOptional')}</Text>
         <TouchableOpacity
           style={styles.customerSelector}
           onPress={() => setCustomerModalVisible(true)}
@@ -238,25 +240,25 @@ export default function CheckoutScreen() {
               </Text>
             </View>
             <Text style={styles.customerSelectorName}>
-              {selectedCustomer ? selectedCustomer.name : 'No Customer'}
+              {selectedCustomer ? selectedCustomer.name : t('checkout.noCustomer')}
             </Text>
           </View>
           <Text style={styles.customerSelectorChevron}>›</Text>
         </TouchableOpacity>
 
-        <Text style={styles.label}>Payment Method</Text>
+        <Text style={styles.label}>{t('checkout.paymentMethod')}</Text>
         <View style={styles.row}>
           <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'Cash' && styles.payMethodBtnActive]} onPress={() => setPaymentType('Cash')}>
-            <Text style={[styles.payMethodText, paymentType === 'Cash' && { color: '#fff' }]}>💰 Cash</Text>
+            <Text style={[styles.payMethodText, paymentType === 'Cash' && { color: '#fff' }]}>{t('checkout.cash')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.payMethodBtn, paymentType === 'PayLater' && styles.payMethodBtnActive]} onPress={() => setPaymentType('PayLater')}>
-            <Text style={[styles.payMethodText, paymentType === 'PayLater' && { color: '#fff' }]}>📘 Pay Later</Text>
+            <Text style={[styles.payMethodText, paymentType === 'PayLater' && { color: '#fff' }]}>{t('checkout.payLater')}</Text>
           </TouchableOpacity>
         </View>
 
         {paymentType === 'Cash' && (
           <View style={styles.cashSection}>
-            <Text style={styles.label}>Cash Given by Customer</Text>
+            <Text style={styles.label}>{t('checkout.cashGiven')}</Text>
             <TextInput
               style={styles.input}
               keyboardType="numeric"
@@ -285,7 +287,7 @@ export default function CheckoutScreen() {
                 style={[styles.denomChip, styles.denomChipExact]}
                 onPress={() => setCashGiven(String(totalAmount))}
               >
-                <Text style={[styles.denomChipText, styles.denomChipTextExact]}>Exact</Text>
+                <Text style={[styles.denomChipText, styles.denomChipTextExact]}>{t('checkout.exact')}</Text>
               </TouchableOpacity>
 
               {[1000, 2000, 5000, 10000, 20000, 50000, 100000].map(denom => {
@@ -305,18 +307,18 @@ export default function CheckoutScreen() {
               })}
             </ScrollView>
 
-            {change > 0 && <Text style={styles.changeText}>Change to return: Rp {change.toLocaleString()}</Text>}
+            {change > 0 && <Text style={styles.changeText}>{t('checkout.changeToReturn', { amount: change.toLocaleString() })}</Text>}
           </View>
         )}
 
         {paymentType === 'PayLater' && (
           <View style={styles.payLaterWarning}>
-            <Text style={{ color: '#c2410c' }}>This transaction will be recorded as Debt for the selected customer.</Text>
+            <Text style={{ color: '#c2410c' }}>{t('checkout.payLaterWarning')}</Text>
           </View>
         )}
 
         <TouchableOpacity style={styles.finalizeBtn} onPress={handleFinalize}>
-          <Text style={styles.finalizeBtnText}>Finalize Transaction</Text>
+          <Text style={styles.finalizeBtnText}>{t('checkout.finalize')}</Text>
         </TouchableOpacity>
         <View style={{ height: 100 }} />
       </ScrollView>

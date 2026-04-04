@@ -3,6 +3,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BLEPrinter } from 'react-native-thermal-receipt-printer';
+import { useTranslation } from '../../src/i18n/LanguageContext';
 import { BackupScheduler } from '../../src/utils/BackupScheduler';
 import { PrinterService } from '../../src/utils/PrinterService';
 import { SyncService } from '../../src/utils/SyncService';
@@ -68,6 +69,7 @@ async function requestBluetoothPermissions(): Promise<boolean> {
 const HEARTBEAT_INTERVAL_MS = 8000; // ping printer every 8 seconds
 
 export default function SettingsScreen() {
+  const { t, language, setLanguage } = useTranslation();
   // Google Sign-In state
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [signingIn, setSigningIn] = useState(false);
@@ -285,18 +287,38 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Settings & Hardware</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text style={styles.title}>{t('settings.title')}</Text>
+
+      {/* Language Setting */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('settings.language')}</Text>
+        <Text style={styles.cardDesc}>{t('settings.languageDesc')}</Text>
+        <View style={styles.langRow}>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+            onPress={() => setLanguage('en')}
+          >
+            <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>{t('settings.english')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'id' && styles.langBtnActive]}
+            onPress={() => setLanguage('id')}
+          >
+            <Text style={[styles.langBtnText, language === 'id' && styles.langBtnTextActive]}>{t('settings.indonesian')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Bluetooth Printer</Text>
-        <Text style={styles.cardDesc}>Pair your printer in Android Settings, then connect to it here before trying to test print.</Text>
+        <Text style={styles.cardTitle}>{t('settings.printer')}</Text>
+        <Text style={styles.cardDesc}>{t('settings.printerDesc')}</Text>
 
         {/* Connection status indicator */}
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, connectedDevice ? styles.statusDotOn : styles.statusDotOff]} />
           <Text style={[styles.statusText, connectedDevice ? styles.statusTextOn : styles.statusTextOff]}>
-            {connectedDevice ? `Connected: ${connectedDevice}` : 'Not connected'}
+            {connectedDevice ? t('settings.connected', { name: connectedDevice }) : t('settings.notConnected')}
           </Text>
         </View>
         <TouchableOpacity
@@ -307,7 +329,7 @@ export default function SettingsScreen() {
         >
           <View style={styles.btnInner}>
             {connecting && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-            <Text style={styles.btnHardwareText}>{connecting ? 'Connecting...' : 'Connect to Default Printer'}</Text>
+            <Text style={styles.btnHardwareText}>{connecting ? t('settings.connecting') : t('settings.connectPrinter')}</Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -318,42 +340,42 @@ export default function SettingsScreen() {
         >
           <View style={styles.btnInner}>
             {printing && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-            <Text style={styles.btnHardwareText}>{printing ? 'Printing...' : 'Test Receipt Print'}</Text>
+            <Text style={styles.btnHardwareText}>{printing ? t('settings.printing') : t('settings.testPrint')}</Text>
           </View>
         </TouchableOpacity>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Cloud Back-up</Text>
-        <Text style={styles.cardDesc}>Securely back up and restore all your data (transactions, customers, products) to Google Sheets.</Text>
+        <Text style={styles.cardTitle}>{t('settings.cloudBackup')}</Text>
+        <Text style={styles.cardDesc}>{t('settings.cloudBackupDesc')}</Text>
         {userInfo ? (
           <View style={{ marginBottom: 10 }}>
-            <Text style={{ color: '#1e293b', marginBottom: 4 }}>Signed in as: {userInfo.user.email}</Text>
+            <Text style={{ color: '#1e293b', marginBottom: 4 }}>{t('settings.signedInAs', { email: userInfo.user.email })}</Text>
             <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#ef4444', marginBottom: 10 }]} onPress={handleGoogleSignOut}>
-              <Text style={styles.btnSyncText}>Sign Out</Text>
+              <Text style={styles.btnSyncText}>{t('settings.signOut')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#2563eb', marginBottom: 10 }]} onPress={handleGoogleSignIn} disabled={signingIn}>
             {signingIn ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
-            <Text style={styles.btnSyncText}>{signingIn ? 'Signing In...' : 'Sign in with Google'}</Text>
+            <Text style={styles.btnSyncText}>{signingIn ? t('settings.signingIn') : t('settings.signInGoogle')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.btnSync} onPress={handleSync} disabled={backupLoading || !userInfo}>
           {backupLoading ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
-          <Text style={styles.btnSyncText}>{backupLoading ? 'Backing Up...' : 'Trigger Backup'}</Text>
+          <Text style={styles.btnSyncText}>{backupLoading ? t('settings.backingUp') : t('settings.triggerBackup')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#2563eb', marginTop: 10 }]} onPress={handleRestore} disabled={restoreLoading || !userInfo}>
           {restoreLoading ? <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} /> : null}
-          <Text style={styles.btnSyncText}>{restoreLoading ? 'Restoring...' : 'Restore from Backup'}</Text>
+          <Text style={styles.btnSyncText}>{restoreLoading ? t('settings.restoring') : t('settings.restoreFromBackup')}</Text>
         </TouchableOpacity>
 
         {/* Auto-backup toggle */}
         <View style={styles.autoBackupRow}>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontWeight: '600', color: '#1e293b' }}>Daily Auto-Backup</Text>
+            <Text style={{ fontWeight: '600', color: '#1e293b' }}>{t('settings.dailyAutoBackup')}</Text>
             <Text style={{ fontSize: 12, color: '#64748b' }}>
-              {lastBackupTime ? `Last backup: ${lastBackupTime}` : 'No backup yet'}
+              {lastBackupTime ? t('settings.lastBackup', { time: lastBackupTime }) : t('settings.noBackupYet')}
             </Text>
           </View>
           <TouchableOpacity
@@ -361,7 +383,7 @@ export default function SettingsScreen() {
             onPress={toggleAutoBackup}
           >
             <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
-              {autoBackupEnabled ? 'ON' : 'OFF'}
+              {autoBackupEnabled ? t('settings.on') : t('settings.off')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -371,12 +393,12 @@ export default function SettingsScreen() {
       <Modal visible={restoreModalVisible} transparent animationType="slide" onRequestClose={() => setRestoreModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.cardTitle}>Select a Backup to Restore</Text>
-            <Text style={[styles.cardDesc, { marginBottom: 10 }]}>This will overwrite all local data.</Text>
+            <Text style={styles.cardTitle}>{t('settings.selectBackup')}</Text>
+            <Text style={[styles.cardDesc, { marginBottom: 10 }]}>{t('settings.overwriteWarning')}</Text>
             {backupListLoading ? (
               <ActivityIndicator size="large" color="#10b981" style={{ marginVertical: 20 }} />
             ) : backupList.length === 0 ? (
-              <Text style={{ color: '#64748b', textAlign: 'center', marginVertical: 20 }}>No backups found in your Google Drive.</Text>
+              <Text style={{ color: '#64748b', textAlign: 'center', marginVertical: 20 }}>{t('settings.noBackupsFound')}</Text>
             ) : (
               <ScrollView style={{ maxHeight: 300 }}>
                 {backupList.map((file) => (
@@ -384,9 +406,9 @@ export default function SettingsScreen() {
                     key={file.id}
                     style={styles.backupItem}
                     onPress={() => {
-                      Alert.alert('Confirm Restore', `Restore from "${file.name}"?\n\nThis will overwrite ALL local data.`, [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Restore', style: 'destructive', onPress: () => handleRestoreFromSpreadsheet(file.id) },
+                      Alert.alert(t('settings.confirmRestore'), t('settings.confirmRestoreMsg', { name: file.name }), [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        { text: t('settings.restore'), style: 'destructive', onPress: () => handleRestoreFromSpreadsheet(file.id) },
                       ]);
                     }}
                   >
@@ -397,12 +419,12 @@ export default function SettingsScreen() {
               </ScrollView>
             )}
             <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#64748b', marginTop: 10 }]} onPress={() => setRestoreModalVisible(false)}>
-              <Text style={styles.btnSyncText}>Cancel</Text>
+              <Text style={styles.btnSyncText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -434,4 +456,9 @@ const styles = StyleSheet.create({
   toggleBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
   toggleBtnOn: { backgroundColor: '#10b981' },
   toggleBtnOff: { backgroundColor: '#94a3b8' },
+  langRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  langBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 2, borderColor: '#e2e8f0', alignItems: 'center', backgroundColor: '#f8fafc' },
+  langBtnActive: { borderColor: '#0ea5e9', backgroundColor: '#f0f9ff' },
+  langBtnText: { fontWeight: '600', color: '#64748b', fontSize: 15 },
+  langBtnTextActive: { color: '#0ea5e9' },
 });

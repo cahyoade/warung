@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../src/i18n/LanguageContext';
 
 type PriceTier = { minQty: string, price: string };
 type ProductRow = { id: number, name: string, category: string, barcode: string, basePrice: number, costPrice: number, unitOfMeasure: string, stockCount: number };
@@ -15,6 +16,7 @@ export default function AddProductScreen() {
   const { productId } = useLocalSearchParams<{ productId?: string }>();
 
   const isEditing = !!productId;
+  const { t } = useTranslation();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -76,7 +78,7 @@ export default function AddProductScreen() {
 
   const handleSave = async () => {
     if (!name || !basePrice || !costPrice) {
-      Alert.alert('Error', 'Name, Selling Price, and Cost Price are required.');
+      Alert.alert(t('common.error'), t('addProduct.errorRequired'));
       return;
     }
 
@@ -120,7 +122,7 @@ export default function AddProductScreen() {
 
       router.back();
     } catch (e) {
-      Alert.alert('Database Error', 'Failed to save product.');
+      Alert.alert(t('common.error'), t('addProduct.errorSave'));
       console.error(e);
     }
   };
@@ -134,16 +136,16 @@ export default function AddProductScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
-      <Stack.Screen options={{ title: isEditing ? 'Edit Good' : 'Add New Good' }} />
-      <Text style={styles.label}>Product Name *</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Indomie Goreng" />
+      <Stack.Screen options={{ title: isEditing ? t('addProduct.editTitle') : t('addProduct.addTitle') }} />
+      <Text style={styles.label}>{t('addProduct.name')}</Text>
+      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder={t('addProduct.namePlaceholder')} />
 
-      <Text style={styles.label}>Category</Text>
-      <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="e.g. Makanan" />
+      <Text style={styles.label}>{t('addProduct.category')}</Text>
+      <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder={t('addProduct.categoryPlaceholder')} />
 
-      <Text style={styles.label}>Barcode</Text>
+      <Text style={styles.label}>{t('addProduct.barcode')}</Text>
       <View style={styles.barcodeRow}>
-        <TextInput style={[styles.input, { flex: 1 }]} value={barcode} onChangeText={setBarcode} placeholder="Scan or type barcode" />
+        <TextInput style={[styles.input, { flex: 1 }]} value={barcode} onChangeText={setBarcode} placeholder={t('addProduct.barcodePlaceholder')} />
         <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
           <Ionicons name="barcode-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -151,48 +153,48 @@ export default function AddProductScreen() {
 
       <View style={styles.row}>
         <View style={styles.half}>
-          <Text style={styles.label}>Selling Price *</Text>
+          <Text style={styles.label}>{t('addProduct.sellingPrice')}</Text>
           <TextInput style={styles.input} keyboardType="numeric" value={basePrice} onChangeText={setBasePrice} placeholder="Rp" />
         </View>
         <View style={styles.half}>
-          <Text style={styles.label}>Cost Price *</Text>
-          <TextInput style={styles.input} keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} placeholder="Rp (Modal)" />
+          <Text style={styles.label}>{t('addProduct.costPrice')}</Text>
+          <TextInput style={styles.input} keyboardType="numeric" value={costPrice} onChangeText={setCostPrice} placeholder={t('addProduct.costPricePlaceholder')} />
         </View>
       </View>
 
       <View style={styles.row}>
         <View style={styles.half}>
-          <Text style={styles.label}>Unit of Measure</Text>
-          <TextInput style={styles.input} value={unitOfMeasure} onChangeText={setUnitOfMeasure} placeholder="Pcs, Kg, Gram..." />
+          <Text style={styles.label}>{t('addProduct.unitOfMeasure')}</Text>
+          <TextInput style={styles.input} value={unitOfMeasure} onChangeText={setUnitOfMeasure} placeholder={t('addProduct.unitPlaceholder')} />
         </View>
         <View style={styles.half}>
-          <Text style={styles.label}>Current Stock</Text>
+          <Text style={styles.label}>{t('addProduct.currentStock')}</Text>
           <TextInput style={styles.input} keyboardType="numeric" value={stock} onChangeText={setStock} />
         </View>
       </View>
 
       <View style={styles.tierSection}>
-        <Text style={styles.tierTitle}>Wholesale / Tiered Pricing</Text>
-        <Text style={styles.tierSubtitle}>Offer discounts for bulk purchases</Text>
+        <Text style={styles.tierTitle}>{t('addProduct.tieredPricing')}</Text>
+        <Text style={styles.tierSubtitle}>{t('addProduct.tieredDesc')}</Text>
         
         {tiers.map((tier, index) => (
           <View key={index} style={styles.tierCard}>
             <View style={styles.tierCardHeader}>
-               <Text style={styles.tierCardTitle}>Tier {index + 1}</Text>
+               <Text style={styles.tierCardTitle}>{t('addProduct.tier', { n: index + 1 })}</Text>
                <TouchableOpacity onPress={() => removeTier(index)}>
                    <Ionicons name="trash" size={20} color="#ef4444" />
                </TouchableOpacity>
             </View>
             <View style={styles.row}>
               <View style={styles.half}>
-                 <Text style={styles.label}>Buy X or more</Text>
+                 <Text style={styles.label}>{t('addProduct.buyXOrMore')}</Text>
                  <TextInput style={styles.input} placeholder="Min Qty" keyboardType="numeric" 
                     value={tier.minQty} onChangeText={(v) => {
                       const newTiers = [...tiers]; newTiers[index].minQty = v; setTiers(newTiers);
                  }} />
               </View>
               <View style={styles.half}>
-                 <Text style={styles.label}>Price becomes</Text>
+                 <Text style={styles.label}>{t('addProduct.priceBecomes')}</Text>
                  <TextInput style={styles.input} placeholder="Rp" keyboardType="numeric" 
                     value={tier.price} onChangeText={(v) => {
                       const newTiers = [...tiers]; newTiers[index].price = v; setTiers(newTiers);
@@ -202,12 +204,12 @@ export default function AddProductScreen() {
           </View>
         ))}
         <TouchableOpacity style={styles.addTierBtn} onPress={() => setTiers([...tiers, {minQty: '', price: ''}])}>
-          <Ionicons name="add-circle" size={20} color="#0ea5e9" /><Text style={styles.addTierText}>Add Price Tier</Text>
+          <Ionicons name="add-circle" size={20} color="#0ea5e9" /><Text style={styles.addTierText}>{t('addProduct.addTier')}</Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>{isEditing ? 'Save Changes' : 'Save Product'}</Text>
+        <Text style={styles.saveBtnText}>{isEditing ? t('addProduct.update') : t('addProduct.save')}</Text>
       </TouchableOpacity>
       </ScrollView>
 
@@ -222,7 +224,7 @@ export default function AddProductScreen() {
           />
           <View style={styles.scanOverlay}>
             <View style={styles.scanFrame} />
-            <Text style={styles.scanHint}>Point camera at a barcode</Text>
+            <Text style={styles.scanHint}>{t('pos.pointCamera')}</Text>
           </View>
           <TouchableOpacity style={styles.scanClose} onPress={() => setScannerVisible(false)}>
             <Ionicons name="close" size={28} color="#fff" />

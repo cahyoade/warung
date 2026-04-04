@@ -3,12 +3,14 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../../src/i18n/LanguageContext';
 
 type Product = { id: number, name: string, stockCount: number, basePrice: number, unitOfMeasure: string };
 
 export default function InventoryScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { t } = useTranslation();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -43,16 +45,16 @@ export default function InventoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Inventory</Text>
+        <Text style={styles.title}>{t('inventory.title')}</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/add-product')}>
             <Ionicons name="add" size={24} color="#fff" />
-            <Text style={styles.addButtonText}>Add Good</Text>
+            <Text style={styles.addButtonText}>{t('inventory.addGood')}</Text>
         </TouchableOpacity>
       </View>
 
       <TextInput
         style={styles.searchInput}
-        placeholder="Search products..."
+        placeholder={t('inventory.searchProducts')}
         value={search}
         onChangeText={handleSearch}
         autoCorrect={false}
@@ -63,7 +65,7 @@ export default function InventoryScreen() {
       <FlatList
         data={filteredProducts}
         keyExtractor={(item) => item.id.toString()}
-        ListEmptyComponent={<Text style={styles.emptyText}>No products found. Start by adding some goods!</Text>}
+        ListEmptyComponent={<Text style={styles.emptyText}>{t('inventory.noProducts')}</Text>}
         renderItem={({ item }) => (
           <View style={styles.productRow}>
             <View style={styles.productInfo}>
@@ -72,7 +74,7 @@ export default function InventoryScreen() {
             </View>
             <View style={styles.rightActions}>
                 <View style={styles.stockBadge}>
-                    <Text style={styles.stockText}>{item.stockCount} in stock</Text>
+                    <Text style={styles.stockText}>{item.stockCount} {t('inventory.inStock')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => router.push({ pathname: '/add-product', params: { productId: item.id } })} style={styles.editButton}>
                     <Ionicons name="pencil" size={20} color="#64748b" />

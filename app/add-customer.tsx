@@ -1,18 +1,20 @@
-import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../src/i18n/LanguageContext';
 
 export default function AddCustomerScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
   const handleSave = async () => {
     if (!name) {
-      Alert.alert('Error', 'Name is required.');
+      Alert.alert(t('common.error'), t('addCustomer.errorName'));
       return;
     }
 
@@ -20,20 +22,20 @@ export default function AddCustomerScreen() {
       await db.runAsync('INSERT INTO Customer (name, phone) VALUES (?, ?)', [name, phone]);
       router.back();
     } catch (e) {
-      Alert.alert('Error', 'Could not save customer. Phone number might already exist.');
+      Alert.alert(t('common.error'), t('addCustomer.errorSave'));
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Customer Name *</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Pak Budi" />
+      <Text style={styles.label}>{t('addCustomer.name')}</Text>
+      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder={t('addCustomer.namePlaceholder')} />
 
-      <Text style={styles.label}>Phone Number</Text>
-      <TextInput style={styles.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} placeholder="0812..." />
+      <Text style={styles.label}>{t('addCustomer.phone')}</Text>
+      <TextInput style={styles.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} placeholder={t('addCustomer.phonePlaceholder')} />
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-        <Text style={styles.saveBtnText}>Save Customer</Text>
+        <Text style={styles.saveBtnText}>{t('addCustomer.save')}</Text>
       </TouchableOpacity>
     </View>
   );

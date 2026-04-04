@@ -1,17 +1,17 @@
-import { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useFocusEffect } from 'expo-router';
-import React from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
+import React, { useCallback, useState } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../../src/i18n/LanguageContext';
 import { PrinterService } from '../../src/utils/PrinterService';
 
 type Transaction = { id: number, date: string, totalAmount: number, totalProfit: number, paymentStatus: string, isVoided: number, cashGiven: number, customerId: number | null };
 type Period = 'today' | 'month' | 'lifetime';
 
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'today',    label: 'Today' },
-  { key: 'month',   label: 'This Month' },
-  { key: 'lifetime', label: 'Lifetime' },
+const PERIOD_KEYS: { key: Period; labelKey: string }[] = [
+  { key: 'today',    labelKey: 'reports.today' },
+  { key: 'month',   labelKey: 'reports.thisMonth' },
+  { key: 'lifetime', labelKey: 'reports.lifetime' },
 ];
 
 function getPeriodClause(period: Period): string {
@@ -26,6 +26,7 @@ function getPeriodClause(period: Period): string {
 
 export default function ReportsScreen() {
   const db = useSQLiteContext();
+  const { t } = useTranslation();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
@@ -64,18 +65,18 @@ export default function ReportsScreen() {
 
   const handleTransactionClick = (txn: Transaction) => {
     if (txn.isVoided) {
-      Alert.alert('Voided', 'This transaction has already been voided.');
+      Alert.alert(t('reports.voided'), t('reports.voidedMsg'));
       return;
     }
 
     Alert.alert(
-      `Transaction #${txn.id}`,
-      `Total: Rp ${txn.totalAmount.toLocaleString()}\nStatus: ${txn.paymentStatus}`,
+      t('reports.transactionTitle', { id: txn.id }),
+      t('reports.transactionInfo', { total: txn.totalAmount.toLocaleString(), status: txn.paymentStatus }),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reprint Receipt', onPress: () => reprintReceipt(txn) },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('reports.reprintReceipt'), onPress: () => reprintReceipt(txn) },
         {
-          text: 'Void / Cancel Sale',
+          text: t('reports.voidSale'),
           style: 'destructive',
           onPress: () => confirmVoid(txn),
         },
@@ -108,14 +109,14 @@ export default function ReportsScreen() {
       });
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to fetch transaction details for reprint.');
+      Alert.alert(t('common.error'), t('reports.reprintError'));
     }
   };
 
   const confirmVoid = (txn: Transaction) => {
-    Alert.alert('Are you sure?', 'Voiding this will restore stock and reverse customer points.', [
-      { text: 'No', style: 'cancel' },
-      { text: 'Yes, Void It', style: 'destructive', onPress: () => voidTransaction(txn) },
+    Alert.alert(t('reports.confirmVoid'), t('reports.confirmVoidMsg'), [
+      { text: t('reports.no'), style: 'cancel' },
+      { text: t('reports.yesVoid'), style: 'destructive', onPress: () => voidTransaction(txn) },
     ]);
   };
 
@@ -137,29 +138,29 @@ export default function ReportsScreen() {
         await db.runAsync('UPDATE Customer SET accumulatedPoints = accumulatedPoints - ? WHERE id = ?', [pointsToRemove, txnData.customerId]);
       }
 
-      Alert.alert('Success', 'Transaction legally voided and stock restored.');
+      Alert.alert(t('common.success'), t('reports.voidSuccess'));
       fetchReports(period);
     } catch (e) {
-      Alert.alert('Error', 'Failed to void transaction.');
+      Alert.alert(t('common.error'), t('reports.voidError'));
     }
   };
 
-  const currentPeriodLabel = PERIODS.find(p => p.key === period)?.label ?? '';
+  const currentPeriodLabel = PERIOD_KEYS.find(p => p.key === period)?.labelKey ?? '';
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Reports & History</Text>
+      <Text style={styles.title}>{t('reports.title')}</Text>
 
       {/* Period Selector */}
       <View style={styles.periodRow}>
-        {PERIODS.map(p => (
+        {PERIOD_KEYS.map(p => (
           <TouchableOpacity
             key={p.key}
             style={[styles.periodBtn, period === p.key && styles.periodBtnActive]}
             onPress={() => handlePeriodChange(p.key)}
           >
             <Text style={[styles.periodBtnText, period === p.key && styles.periodBtnTextActive]}>
-              {p.label}
+              {t(p.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -167,15 +168,15 @@ export default function ReportsScreen() {
 
       {/* Stats Card */}
       <View style={styles.statsCard}>
-        <Text style={styles.statsLabel}>{currentPeriodLabel} Revenue</Text>
+        <Text style={styles.statsLabel}>{t('reports.revenue', { period: t(currentPeriodLabel) })}</Text>
         <Text style={styles.statsGross}>Rp {totalRevenue.toLocaleString()}</Text>
         <View style={styles.profitBadge}>
-          <Text style={styles.statsProfit}>+ Rp {totalProfit.toLocaleString()} Net Profit</Text>
+          <Text style={styles.statsProfit}>{t('reports.netProfit', { amount: totalProfit.toLocaleString() })}</Text>
         </View>
       </View>
 
       <Text style={styles.subTitle}>
-        {currentPeriodLabel === 'Lifetime' ? 'Recent' : currentPeriodLabel} Transactions
+        {period === 'lifetime' ? t('reports.recentTransactions') : t('reports.transactions', { period: t(currentPeriodLabel) })}
       </Text>
 
       <FlatList
@@ -183,7 +184,7 @@ export default function ReportsScreen() {
         keyExtractor={t => t.id.toString()}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No transactions found.</Text>
+            <Text style={styles.emptyText}>{t('reports.noTransactions')}</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -196,7 +197,7 @@ export default function ReportsScreen() {
                 {new Date(item.date).toLocaleString()}
               </Text>
               <Text style={[styles.txnStatus, item.isVoided ? styles.voidedText : null]}>
-                {item.isVoided ? 'VOID' : (item.paymentStatus === 'DebtSettlement' ? 'DEBT SETTLEMENT' : item.paymentStatus)}
+                {item.isVoided ? t('reports.void') : (item.paymentStatus === 'DebtSettlement' ? t('reports.debtSettlement') : item.paymentStatus)}
               </Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -205,7 +206,7 @@ export default function ReportsScreen() {
               </Text>
               {item.paymentStatus !== 'DebtSettlement' && (
                 <Text style={[styles.txnProfit, item.isVoided ? styles.voidedText : null]}>
-                  Profit: Rp {item.totalProfit.toLocaleString()}
+                  {t('reports.profit')}: Rp {item.totalProfit.toLocaleString()}
                 </Text>
               )}
             </View>

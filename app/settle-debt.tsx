@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../src/i18n/LanguageContext';
 import { PrinterService } from '../src/utils/PrinterService';
 
 type Customer = { id: number, name: string, phone: string, accumulatedPoints: number };
@@ -12,6 +13,7 @@ export default function SettleDebtScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { t } = useTranslation();
   const customerId = parseInt(params.customerId as string, 10);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -56,12 +58,12 @@ export default function SettleDebtScreen() {
   const handleSettle = async () => {
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount greater than 0.');
+      Alert.alert(t('common.error'), t('settleDebt.errorAmount'));
       return;
     }
 
     if (amount > totalDebt) {
-      Alert.alert('Error', 'Payment cannot exceed total debt.');
+      Alert.alert(t('common.error'), t('settleDebt.errorExceed'));
       return;
     }
 
@@ -115,15 +117,15 @@ export default function SettleDebtScreen() {
       });
 
       if (!printed) {
-        Alert.alert('Warning', 'Transaction recorded, but receipt could not be printed.');
+        Alert.alert(t('common.warning'), t('settleDebt.warning'));
       } else {
-        Alert.alert('Success', `Debt settled successfully! Awarded ${pointsAwarded} pts.`);
+        Alert.alert(t('common.success'), t('settleDebt.success', { points: pointsAwarded }));
       }
 
       router.replace('/(tabs)/customers');
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'Failed to settle debt.');
+      Alert.alert(t('common.error'), t('settleDebt.error'));
     }
   };
 
@@ -131,17 +133,17 @@ export default function SettleDebtScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Settle Debt for {customer.name}</Text>
+      <Text style={styles.heading}>{t('settleDebt.title', { name: customer.name })}</Text>
       
       <View style={styles.summaryBox}>
-        <Text style={styles.totalLabel}>Total Owed</Text>
+        <Text style={styles.totalLabel}>{t('settleDebt.totalOwed')}</Text>
         <Text style={styles.totalText}>Rp {totalDebt.toLocaleString()}</Text>
       </View>
 
-      <Text style={styles.label}>Outstanding Transactions</Text>
+      <Text style={styles.label}>{t('settleDebt.outstandingTransactions')}</Text>
       <View style={styles.listContainer}>
         {unpaidTransactions.length === 0 ? (
-          <Text style={styles.emptyText}>No pending debt found.</Text>
+          <Text style={styles.emptyText}>{t('settleDebt.noPendingDebt')}</Text>
         ) : (
           unpaidTransactions.map(t => {
             const owes = t.totalAmount - t.cashGiven;
@@ -150,7 +152,7 @@ export default function SettleDebtScreen() {
                 <View style={styles.txnRowHeader}>
                   <View>
                     <Text style={styles.txnDate}>{new Date(t.date).toLocaleString()}</Text>
-                    <Text style={styles.txnId}>Transaction #{t.id}</Text>
+                    <Text style={styles.txnId}>{t('settleDebt.transaction', { id: t.id })}</Text>
                   </View>
                   <Text style={styles.txnOwes}>Rp {owes.toLocaleString()}</Text>
                 </View>
@@ -169,15 +171,15 @@ export default function SettleDebtScreen() {
       </View>
 
       <View style={styles.inputSection}>
-        <Text style={styles.label}>Settlement Amount</Text>
+        <Text style={styles.label}>{t('settleDebt.settlementAmount')}</Text>
         <TextInput
           style={styles.input}
           keyboardType="numeric"
           value={paymentAmount}
           onChangeText={setPaymentAmount}
-          placeholder="Enter amount to pay"
+          placeholder={t('settleDebt.enterAmount')}
         />
-        <Text style={styles.hint}>1 point awarded per Rp 10,000 paid</Text>
+        <Text style={styles.hint}>{t('settleDebt.pointHint')}</Text>
       </View>
 
       <TouchableOpacity 
@@ -185,7 +187,7 @@ export default function SettleDebtScreen() {
         onPress={handleSettle}
         disabled={unpaidTransactions.length === 0}
       >
-        <Text style={styles.settleBtnText}>Submit Payment & Print Receipt</Text>
+        <Text style={styles.settleBtnText}>{t('settleDebt.submitPayment')}</Text>
       </TouchableOpacity>
       <View style={{ height: 50 }} />
     </ScrollView>

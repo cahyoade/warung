@@ -3,8 +3,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import React, { useState, useRef } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, Modal, TextInput, Alert } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useTranslation } from '../../src/i18n/LanguageContext';
 
 type Product = { id: number, name: string, barcode: string, stockCount: number, basePrice: number, costPrice: number, unitOfMeasure: string };
 type PriceTier = { productId: number, minQuantity: number, price: number };
@@ -17,6 +18,7 @@ export type CartItem = Product & { cartQty: number, activeUnitPrice: number };
 export default function POSScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [tiers, setTiers] = useState<PriceTier[]>([]);
@@ -156,7 +158,7 @@ export default function POSScreen() {
     if (!cameraPermission?.granted) {
       const result = await requestCameraPermission();
       if (!result.granted) {
-        Alert.alert('Permission required', 'Camera permission is needed to scan barcodes.');
+        Alert.alert(t('pos.permissionRequired'), t('pos.cameraPermissionMsg'));
         return;
       }
     }
@@ -177,17 +179,17 @@ export default function POSScreen() {
       handleProductTap(matched);
     } else {
       setSearchQuery(data);
-      Alert.alert('Not found', `No product matched barcode "${data}". Search results shown.`);
+      Alert.alert(t('pos.notFound'), t('pos.notFoundMsg', { barcode: data }));
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Warung POS</Text>
+        <Text style={styles.title}>{t('pos.title')}</Text>
         <TouchableOpacity style={styles.quickAddBtn} onPress={() => router.push('/add-product')}>
           <Ionicons name="flash" size={20} color="#fff" />
-          <Text style={styles.quickAddText}>Quick Add</Text>
+          <Text style={styles.quickAddText}>{t('pos.quickAdd')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -200,7 +202,7 @@ export default function POSScreen() {
               <Ionicons name="search" size={15} color="#94a3b8" style={{ marginRight: 6 }} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search product..."
+                placeholder={t('pos.searchProduct')}
                 placeholderTextColor="#94a3b8"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -225,9 +227,9 @@ export default function POSScreen() {
               <TouchableOpacity style={styles.productCard} onPress={() => handleProductTap(item)}>
                 <Text style={styles.productName}>{item.name}</Text>
                 <Text style={styles.productPrice}>Rp {item.basePrice.toLocaleString()}</Text>
-                <Text style={styles.productStock}>{item.stockCount} {item.unitOfMeasure} left</Text>
+                <Text style={styles.productStock}>{item.stockCount} {item.unitOfMeasure} {t('pos.left')}</Text>
                 {tiers.some(t => t.productId === item.id) && (
-                  <View style={styles.wholesaleBadge}><Text style={styles.wholesaleText}>Wholesale</Text></View>
+                  <View style={styles.wholesaleBadge}><Text style={styles.wholesaleText}>{t('pos.wholesale')}</Text></View>
                 )}
               </TouchableOpacity>
             )}
@@ -236,7 +238,7 @@ export default function POSScreen() {
 
         {/* Cart Sidebar / Bottom Area */}
         <View style={styles.cartContainer}>
-          <Text style={styles.cartTitle}>Current Cart</Text>
+          <Text style={styles.cartTitle}>{t('pos.currentCart')}</Text>
           <FlatList
             data={cart}
             keyExtractor={c => c.id.toString()}
@@ -268,17 +270,17 @@ export default function POSScreen() {
                 </View>
               </View>
             )}
-            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 20 }}>Cart is empty</Text>}
+            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#888', marginTop: 20 }}>{t('pos.cartEmpty')}</Text>}
           />
           <View style={styles.checkoutBox}>
-            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalLabel}>{t('pos.total')}</Text>
             <Text style={styles.totalAmount}>Rp {currentTotal.toLocaleString()}</Text>
             <TouchableOpacity
               style={[styles.checkoutBtn, cart.length === 0 && { backgroundColor: '#ccc' }]}
               disabled={cart.length === 0}
               onPress={() => router.push({ pathname: '/checkout', params: { cartData: JSON.stringify(cart), totalAmount: currentTotal } })}
             >
-              <Text style={styles.checkoutBtnText}>Checkout</Text>
+              <Text style={styles.checkoutBtnText}>{t('pos.checkout')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -295,7 +297,7 @@ export default function POSScreen() {
           />
           <View style={styles.scanOverlay}>
             <View style={styles.scanFrame} />
-            <Text style={styles.scanHint}>Point camera at a barcode</Text>
+            <Text style={styles.scanHint}>{t('pos.pointCamera')}</Text>
           </View>
           <TouchableOpacity style={styles.scanClose} onPress={() => setScannerVisible(false)}>
             <Ionicons name="close" size={28} color="#fff" />
@@ -307,7 +309,7 @@ export default function POSScreen() {
       <Modal visible={fractionModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Select Quantity</Text>
+                <Text style={styles.modalTitle}>{t('pos.selectQuantity')}</Text>
                 <Text style={styles.modalSubtitle}>{selectedFractionProduct?.name}</Text>
                 
                 <View style={styles.fractionRow}>
@@ -317,14 +319,14 @@ export default function POSScreen() {
                     <TouchableOpacity onPress={() => addToCartFromModal(1)} style={styles.fractionBtn}><Text style={styles.fractionBtnText}>1</Text></TouchableOpacity>
                 </View>
 
-                <TextInput style={styles.fractionInput} keyboardType="numeric" placeholder="Or enter custom amount..." onChangeText={setCustomFraction} value={customFraction} />
+                <TextInput style={styles.fractionInput} keyboardType="numeric" placeholder={t('pos.orEnterCustom')} onChangeText={setCustomFraction} value={customFraction} />
 
                 <View style={styles.modalActions}>
-                    <TouchableOpacity onPress={() => { setFractionModalVisible(false); setCustomFraction(''); }} style={styles.modalCancelBtn}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setFractionModalVisible(false); setCustomFraction(''); }} style={styles.modalCancelBtn}><Text style={styles.modalCancelText}>{t('pos.cancel')}</Text></TouchableOpacity>
                     <TouchableOpacity onPress={() => {
                         const val = parseFloat(customFraction);
                         if (!isNaN(val) && val > 0) addToCartFromModal(val);
-                    }} style={styles.modalConfirmBtn}><Text style={styles.modalConfirmText}>Add</Text></TouchableOpacity>
+                    }} style={styles.modalConfirmBtn}><Text style={styles.modalConfirmText}>{t('pos.add')}</Text></TouchableOpacity>
                 </View>
             </View>
         </View>
