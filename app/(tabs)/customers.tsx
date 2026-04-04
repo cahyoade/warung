@@ -70,7 +70,7 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fcfcfc' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },
+  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a' },
   addButton: { flexDirection: 'row', backgroundColor: '#0ea5e9', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 6 },
   emptyText: { textAlign: 'center', marginTop: 40, color: '#666', fontSize: 16 },

@@ -52,15 +52,19 @@ export default function InventoryScreen() {
         </TouchableOpacity>
       </View>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder={t('inventory.searchProducts')}
-        value={search}
-        onChangeText={handleSearch}
-        autoCorrect={false}
-        autoCapitalize="none"
-        clearButtonMode="while-editing"
-      />
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t('inventory.searchProducts')}
+          placeholderTextColor="#9ca3af"
+          value={search}
+          onChangeText={handleSearch}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
 
       <FlatList
         data={filteredProducts}
@@ -88,19 +92,27 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  searchInput: {
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#f3f4f6',
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    marginBottom: 16,
+    paddingHorizontal: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 16,
   },
   container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fcfcfc' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },
+  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a' },
   addButton: { flexDirection: 'row', backgroundColor: '#0ea5e9', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
   addButtonText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
   emptyText: { textAlign: 'center', marginTop: 40, color: '#666', fontSize: 16 },

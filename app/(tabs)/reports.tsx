@@ -219,7 +219,7 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fcfcfc' },
-  title: { fontSize: 28, fontWeight: '800', color: '#1a1a1a', marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 16 },
 
   // Period tabs
   periodRow: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 20 },
