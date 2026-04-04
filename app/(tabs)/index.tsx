@@ -6,7 +6,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import React, { useState, useRef } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View, Modal, TextInput, Alert } from 'react-native';
 
-type Product = { id: number, name: string, stockCount: number, basePrice: number, costPrice: number, unitOfMeasure: string };
+type Product = { id: number, name: string, barcode: string, stockCount: number, basePrice: number, costPrice: number, unitOfMeasure: string };
 type PriceTier = { productId: number, minQuantity: number, price: number };
 
 type ProductWithTierRow = Product & { tierMinQty: number | null, tierPrice: number | null };
@@ -53,6 +53,7 @@ export default function POSScreen() {
             productsMap.set(row.id, {
               id: row.id,
               name: row.name,
+              barcode: row.barcode,
               stockCount: row.stockCount,
               basePrice: row.basePrice,
               costPrice: row.costPrice,
@@ -168,14 +169,13 @@ export default function POSScreen() {
     scannedRef.current = true;
     setScannerVisible(false);
 
-    // Match by name containing barcode data (fallback until barcode field is added)
-    const matched = products.find(
-      p => p.name.toLowerCase().includes(data.toLowerCase())
-    );
+    // Match by exact barcode field first, then fall back to name search
+    const matched = products.find(p => p.barcode && p.barcode === data)
+      ?? products.find(p => p.name.toLowerCase().includes(data.toLowerCase()));
+
     if (matched) {
       handleProductTap(matched);
     } else {
-      // Show barcode in search so user can find manually
       setSearchQuery(data);
       Alert.alert('Not found', `No product matched barcode "${data}". Search results shown.`);
     }
@@ -348,10 +348,10 @@ const styles = StyleSheet.create({
   productStock: { fontSize: 10, color: '#64748b', marginTop: 4 },
   wholesaleBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#ecfdf5', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
   wholesaleText: { color: '#10b981', fontSize: 9, fontWeight: 'bold' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 4, marginBottom: 6 },
+  searchRow: { flexDirection: 'row', alignItems: 'stretch', marginHorizontal: 4, marginBottom: 6 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#e2e8f0', marginRight: 6 },
   searchInput: { flex: 1, fontSize: 13, color: '#1e293b', padding: 0 },
-  scanBtn: { backgroundColor: '#0ea5e9', borderRadius: 8, padding: 8 },
+  scanBtn: { backgroundColor: '#0ea5e9', borderRadius: 8, paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
   scanOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
   scanFrame: { width: 220, height: 140, borderWidth: 2, borderColor: '#0ea5e9', borderRadius: 12, backgroundColor: 'transparent' },
   scanHint: { color: '#fff', marginTop: 16, fontSize: 14, fontWeight: '500', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4 },
