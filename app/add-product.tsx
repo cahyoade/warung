@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 type PriceTier = { minQty: string, price: string };
 type ProductRow = { id: number, name: string, category: string, barcode: string, basePrice: number, costPrice: number, unitOfMeasure: string, stockCount: number };
@@ -18,6 +19,29 @@ export default function AddProductScreen() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [barcode, setBarcode] = useState('');
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scannedRef = useRef(false);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        Alert.alert('Permission required', 'Camera permission is needed to scan barcodes.');
+        return;
+      }
+    }
+    scannedRef.current = false;
+    setScannerVisible(true);
+  };
+
+  const handleBarcodeScanned = ({ data }: { data: string }) => {
+    if (scannedRef.current) return;
+    scannedRef.current = true;
+    setScannerVisible(false);
+    setBarcode(data);
+  };
+
   const [basePrice, setBasePrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
   const [unitOfMeasure, setUnitOfMeasure] = useState('Pcs');
@@ -108,7 +132,8 @@ export default function AddProductScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
       <Stack.Screen options={{ title: isEditing ? 'Edit Good' : 'Add New Good' }} />
       <Text style={styles.label}>Product Name *</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Indomie Goreng" />
@@ -117,7 +142,12 @@ export default function AddProductScreen() {
       <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="e.g. Makanan" />
 
       <Text style={styles.label}>Barcode</Text>
-      <TextInput style={styles.input} value={barcode} onChangeText={setBarcode} placeholder="Scan or type barcode" />
+      <View style={styles.barcodeRow}>
+        <TextInput style={[styles.input, { flex: 1 }]} value={barcode} onChangeText={setBarcode} placeholder="Scan or type barcode" />
+        <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
+          <Ionicons name="barcode-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.row}>
         <View style={styles.half}>
@@ -179,13 +209,32 @@ export default function AddProductScreen() {
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
         <Text style={styles.saveBtnText}>{isEditing ? 'Save Changes' : 'Save Product'}</Text>
       </TouchableOpacity>
-      <View style={{height: 50}} />
-    </ScrollView>
+      </ScrollView>
+
+      {/* Barcode Scanner Modal */}
+      <Modal visible={scannerVisible} animationType="slide" onRequestClose={() => setScannerVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <CameraView
+            style={{ flex: 1 }}
+            facing="back"
+            onBarcodeScanned={handleBarcodeScanned}
+            barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'code128', 'code39', 'qr', 'upc_a', 'upc_e'] }}
+          />
+          <View style={styles.scanOverlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scanHint}>Point camera at a barcode</Text>
+          </View>
+          <TouchableOpacity style={styles.scanClose} onPress={() => setScannerVisible(false)}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fcfcfc' },
+  container: { flex: 1, padding: 20, backgroundColor: '#fcfcfc', paddingBottom: 0 },
   label: { fontSize: 13, fontWeight: '600', color: '#64748b', marginBottom: 8, marginTop: 12 },
   input: { backgroundColor: '#fff', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', fontSize: 16 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
@@ -199,5 +248,11 @@ const styles = StyleSheet.create({
   addTierBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 5, paddingVertical: 10, justifyContent: 'center', backgroundColor: '#e0f2fe', borderRadius: 8 },
   addTierText: { color: '#0ea5e9', fontWeight: 'bold', marginLeft: 8 },
   saveBtn: { backgroundColor: '#10b981', padding: 18, borderRadius: 12, alignItems: 'center', marginTop: 30 },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
+  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  barcodeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scanBtn: { backgroundColor: '#0ea5e9', borderRadius: 10, padding: 14, justifyContent: 'center', alignItems: 'center' },
+  scanOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  scanFrame: { width: 220, height: 140, borderWidth: 2, borderColor: '#0ea5e9', borderRadius: 12, backgroundColor: 'transparent' },
+  scanHint: { color: '#fff', marginTop: 16, fontSize: 14, fontWeight: '500', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4 },
+  scanClose: { position: 'absolute', top: 50, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 6 }
 });
