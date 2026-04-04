@@ -37,20 +37,20 @@ export default function SettleDebtScreen() {
       ORDER BY date ASC
     `, [customerId]);
     
-    const txnsWithItems = await Promise.all(txns.map(async t => {
+    const txnsWithItems = await Promise.all(txns.map(async txn => {
       const items = await db.getAllAsync<TransactionItem>(
         `SELECT p.name, ti.quantity, ti.subtotal 
          FROM TransactionItem ti 
          JOIN Product p ON ti.productId = p.id 
          WHERE ti.transactionId = ?`, 
-        [t.id]
+        [txn.id]
       );
-      return { ...t, items };
+      return { ...txn, items };
     }));
     
     setUnpaidTransactions(txnsWithItems);
 
-    const debt = txnsWithItems.reduce((sum, t) => sum + (t.totalAmount - t.cashGiven), 0);
+    const debt = txnsWithItems.reduce((sum, txn) => sum + (txn.totalAmount - txn.cashGiven), 0);
     setTotalDebt(debt);
     setPaymentAmount(debt.toString());
   };
@@ -69,7 +69,7 @@ export default function SettleDebtScreen() {
 
     try {
       let remainingPayment = amount;
-      let pointsAwarded = Math.floor(amount / 10000); // 1 point per 10k
+      let pointsAwarded = Math.floor(amount / 20000); // 1 point per 20k
 
       await db.withTransactionAsync(async () => {
         // 1. Distribute payment across transactions
@@ -145,19 +145,19 @@ export default function SettleDebtScreen() {
         {unpaidTransactions.length === 0 ? (
           <Text style={styles.emptyText}>{t('settleDebt.noPendingDebt')}</Text>
         ) : (
-          unpaidTransactions.map(t => {
-            const owes = t.totalAmount - t.cashGiven;
+          unpaidTransactions.map(txn => {
+            const owes = txn.totalAmount - txn.cashGiven;
             return (
-              <View key={t.id} style={styles.txnCard}>
+              <View key={txn.id} style={styles.txnCard}>
                 <View style={styles.txnRowHeader}>
                   <View>
-                    <Text style={styles.txnDate}>{new Date(t.date).toLocaleString()}</Text>
-                    <Text style={styles.txnId}>{t('settleDebt.transaction', { id: t.id })}</Text>
+                    <Text style={styles.txnDate}>{new Date(txn.date).toLocaleString()}</Text>
+                    <Text style={styles.txnId}>{t('settleDebt.transaction', { id: txn.id })}</Text>
                   </View>
                   <Text style={styles.txnOwes}>Rp {owes.toLocaleString()}</Text>
                 </View>
                 <View style={styles.txnItemsContainer}>
-                  {t.items.map((i, idx) => (
+                  {txn.items.map((i, idx) => (
                     <View key={idx} style={styles.itemRow}>
                        <Text style={styles.itemName}>{i.quantity}x {i.name}</Text>
                        <Text style={styles.itemPrice}>Rp {i.subtotal.toLocaleString()}</Text>

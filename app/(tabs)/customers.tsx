@@ -51,14 +51,27 @@ export default function CustomersScreen() {
             style={styles.row}
             onPress={() => router.push({ pathname: '/settle-debt', params: { customerId: item.id } })}
           >
-            <View>
+            <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.phone}>{item.phone} • {item.accumulatedPoints} {t('customers.pts')}</Text>
             </View>
-            <View style={[styles.debtBadge, item.totalDebt > 0 ? styles.activeDebt : null]}>
-                <Text style={[styles.debtText, item.totalDebt > 0 ? styles.activeDebtText : null]}>
-                  {item.totalDebt > 0 ? t('customers.owes', { amount: item.totalDebt.toLocaleString() }) : t('customers.noDebt')}
-                </Text>
+            <View style={styles.actionColumn}>
+              <View style={[styles.debtBadge, item.totalDebt > 0 ? styles.activeDebt : null]}>
+                  <Text style={[styles.debtText, item.totalDebt > 0 ? styles.activeDebtText : null]}>
+                    {item.totalDebt > 0 ? t('customers.owes', { amount: item.totalDebt.toLocaleString() }) : t('customers.noDebt')}
+                  </Text>
+              </View>
+              {item.accumulatedPoints > 0 && (
+                <TouchableOpacity
+                  style={styles.redeemBadge}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    router.push({ pathname: '/redeem-points', params: { customerId: item.id } });
+                  }}
+                >
+                  <Text style={styles.redeemText}>🎁 {t('customers.redeem')}</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </TouchableOpacity>
         )}
@@ -80,5 +93,8 @@ const styles = StyleSheet.create({
   debtBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   debtText: { color: '#64748b', fontWeight: '600', fontSize: 12 },
   activeDebt: { backgroundColor: '#fef2f2' },
-  activeDebtText: { color: '#ef4444' }
+  activeDebtText: { color: '#ef4444' },
+  actionColumn: { alignItems: 'flex-end', gap: 6 },
+  redeemBadge: { backgroundColor: '#ede9fe', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  redeemText: { color: '#7c3aed', fontWeight: '600', fontSize: 12 }
 });

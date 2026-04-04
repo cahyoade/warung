@@ -429,7 +429,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fcfcfc' },
+  container: { flex: 1, padding: 20, paddingTop: 60, paddingBottom: 60, backgroundColor: '#fcfcfc' },
   title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 20 },
   card: { backgroundColor: '#fff', padding: 20, borderRadius: 16, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 1 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },

@@ -178,7 +178,7 @@ export default function POSScreen() {
     if (matched) {
       handleProductTap(matched);
     } else {
-      setSearchQuery(data);
+      setSearchQuery('');
       Alert.alert(t('pos.notFound'), t('pos.notFoundMsg', { barcode: data }));
     }
   };

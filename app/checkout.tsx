@@ -25,10 +25,15 @@ export default function CheckoutScreen() {
 
   const [finalizedTransactionId, setFinalizedTransactionId] = useState<number | null>(null);
   const [finalizedPoints, setFinalizedPoints] = useState<number>(0);
+  const [finalizedTotalPoints, setFinalizedTotalPoints] = useState<number>(0);
 
   // Customer picker modal state
   const [customerModalVisible, setCustomerModalVisible] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
+
+  const refreshCustomers = () => {
+    db.getAllAsync<Customer>('SELECT id, name FROM Customer').then(setCustomers);
+  };
 
   // Total Profit is sum of (activeUnitPrice - costPrice) * qty
   const totalProfit = cartData.reduce((sum, item) => sum + ((item.activeUnitPrice - item.costPrice) * item.cartQty), 0);
@@ -37,7 +42,9 @@ export default function CheckoutScreen() {
     db.getAllAsync<Customer>('SELECT id, name FROM Customer').then(setCustomers);
   }, []);
 
-  const change = (parseFloat(cashGiven) || 0) - totalAmount;
+  const cashGivenNum = parseFloat(cashGiven) || 0;
+  const cashShortfall = paymentType === 'Cash' ? Math.max(0, totalAmount - cashGivenNum) : 0;
+  const change = cashGivenNum - totalAmount;
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId) ?? null;
 
@@ -46,8 +53,8 @@ export default function CheckoutScreen() {
   );
 
   const handleFinalize = async () => {
-    if (paymentType === 'Cash' && (parseFloat(cashGiven) || 0) < totalAmount) {
-      Alert.alert(t('common.error'), t('checkout.errorCash'));
+    if (paymentType === 'Cash' && cashGivenNum < totalAmount && !selectedCustomerId) {
+      Alert.alert(t('common.error'), t('checkout.errorCashNoCustomer'));
       return;
     }
     if (paymentType === 'PayLater' && !selectedCustomerId) {
@@ -58,13 +65,14 @@ export default function CheckoutScreen() {
     try {
       // 1. Create Transaction
       const dateStr = new Date().toISOString();
-      const status = paymentType === 'Cash' ? 'Paid' : 'Unpaid';
-      const pointsAwarded = Math.floor(totalAmount / 10000); // 1 point per 10k logic
-      const actualCash = paymentType === 'Cash' ? totalAmount : 0; // for simplicity
+      const actualCash = paymentType === 'Cash' ? cashGivenNum : 0;
+      const isFullyPaid = paymentType === 'Cash' && cashGivenNum >= totalAmount;
+      const status = isFullyPaid ? 'Paid' : 'Unpaid';
+      const pointsAwarded = isFullyPaid ? Math.floor(totalAmount / 20000) : 0; // points only for fully paid
 
       const res = await db.runAsync(
         'INSERT INTO "Transaction" (date, totalAmount, totalProfit, cashGiven, paymentStatus, customerId) VALUES (?, ?, ?, ?, ?, ?)',
-        [dateStr, totalAmount, totalProfit, actualCash, status, selectedCustomerId || null]
+        [dateStr, totalAmount, totalProfit, Math.min(actualCash, totalAmount), status, selectedCustomerId || null]
       );
 
       const transactionId = res.lastInsertRowId;
@@ -82,17 +90,33 @@ export default function CheckoutScreen() {
         );
       }
 
-      // 3. Award Points to Customer
-      if (selectedCustomerId && paymentType === 'Cash') {
+      // 3. Award Points to Customer (only for fully paid)
+      if (selectedCustomerId && isFullyPaid) {
         await db.runAsync(
           'UPDATE Customer SET accumulatedPoints = accumulatedPoints + ? WHERE id = ?',
           [pointsAwarded, selectedCustomerId]
         );
       }
 
+      // Fetch updated points balance for the customer
+      let totalPoints = 0;
+      if (selectedCustomerId) {
+        const row = await db.getFirstAsync<{ accumulatedPoints: number }>(
+          'SELECT accumulatedPoints FROM Customer WHERE id = ?',
+          [selectedCustomerId]
+        );
+        totalPoints = row?.accumulatedPoints ?? 0;
+      }
+
       setFinalizedTransactionId(transactionId);
       setFinalizedPoints(pointsAwarded);
-      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : ''}`);
+      setFinalizedTotalPoints(totalPoints);
+
+      const debtAmount = paymentType === 'Cash' ? Math.max(0, totalAmount - cashGivenNum) : totalAmount;
+      const debtMsg = debtAmount > 0 && selectedCustomerId
+        ? `\n${t('checkout.debtAdded', { amount: debtAmount.toLocaleString() })}`
+        : '';
+      Alert.alert(t('common.success'), `${t('checkout.finalize')}!${pointsAwarded > 0 ? ` ${pointsAwarded} pts.` : ''}${debtMsg}`);
 
     } catch (e) {
       console.error(e);
@@ -110,6 +134,7 @@ export default function CheckoutScreen() {
       cashGiven: actualCash,
       customerName: customers.find(c => c.id === selectedCustomerId)?.name,
       pointsEarned: finalizedPoints,
+      totalPointsBalance: selectedCustomerId ? finalizedTotalPoints : undefined,
     });
 
     if (!printed) {
@@ -176,6 +201,18 @@ export default function CheckoutScreen() {
               )}
             </View>
 
+            {/* Add New Customer shortcut */}
+            <TouchableOpacity
+              style={styles.addCustomerBtn}
+              onPress={() => {
+                setCustomerModalVisible(false);
+                setCustomerSearch('');
+                router.push('/add-customer');
+              }}
+            >
+              <Text style={styles.addCustomerBtnText}>+ {t('checkout.addNewCustomer')}</Text>
+            </TouchableOpacity>
+
             {/* List */}
             <ScrollView style={styles.modalList} keyboardShouldPersistTaps="handled">
               {/* No customer option */}
@@ -230,7 +267,7 @@ export default function CheckoutScreen() {
         <Text style={styles.label}>{t('checkout.customerOptional')}</Text>
         <TouchableOpacity
           style={styles.customerSelector}
-          onPress={() => setCustomerModalVisible(true)}
+          onPress={() => { refreshCustomers(); setCustomerModalVisible(true); }}
           activeOpacity={0.8}
         >
           <View style={styles.customerSelectorLeft}>
@@ -308,6 +345,12 @@ export default function CheckoutScreen() {
             </ScrollView>
 
             {change > 0 && <Text style={styles.changeText}>{t('checkout.changeToReturn', { amount: change.toLocaleString() })}</Text>}
+            {cashShortfall > 0 && selectedCustomerId && (
+              <Text style={styles.debtText}>{t('checkout.debtNote', { amount: cashShortfall.toLocaleString() })}</Text>
+            )}
+            {cashShortfall > 0 && !selectedCustomerId && (
+              <Text style={styles.debtWarningText}>{t('checkout.errorCashNoCustomer')}</Text>
+            )}
           </View>
         )}
 
@@ -417,6 +460,20 @@ const styles = StyleSheet.create({
   customerRowNameActive: { color: '#0ea5e9', fontWeight: '700' },
   checkMark: { fontSize: 18, color: '#0ea5e9', fontWeight: '700' },
   emptyText: { textAlign: 'center', color: '#94a3b8', padding: 30, fontSize: 15 },
+  addCustomerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 12,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#6ee7b7',
+    borderStyle: 'dashed',
+  },
+  addCustomerBtnText: { fontSize: 15, fontWeight: '700', color: '#059669' },
 
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   payMethodBtn: { flex: 1, padding: 15, backgroundColor: '#e2e8f0', borderRadius: 10, alignItems: 'center', marginHorizontal: 5 },
@@ -452,6 +509,8 @@ const styles = StyleSheet.create({
   denomChipTextClear: { color: '#e11d48' },
 
   changeText: { marginTop: 10, color: '#0ea5e9', fontSize: 16, fontWeight: 'bold' },
+  debtText: { marginTop: 10, color: '#d97706', fontSize: 15, fontWeight: '600' },
+  debtWarningText: { marginTop: 10, color: '#dc2626', fontSize: 14, fontWeight: '600' },
   payLaterWarning: { backgroundColor: '#ffedd5', padding: 15, borderRadius: 10, marginBottom: 20 },
   finalizeBtn: { backgroundColor: '#0f172a', padding: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   finalizeBtnText: { color: '#f8fafc', fontWeight: 'bold', fontSize: 20 },

@@ -24,6 +24,7 @@ export default function RootLayout() {
             <Stack.Screen name="add-product" options={{ presentation: 'modal', title: 'Add Product' }} />
             <Stack.Screen name="add-customer" options={{ presentation: 'modal', title: 'Add Customer' }} />
             <Stack.Screen name="checkout" options={{ presentation: 'modal', title: 'Checkout' }} />
+            <Stack.Screen name="redeem-points" options={{ presentation: 'modal', title: 'Redeem Points' }} />
           </Stack>
           <StatusBar style="auto" />
         </SQLiteProvider>
