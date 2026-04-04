@@ -42,8 +42,13 @@ export default function InventoryScreen() {
                 <Text style={styles.productName}>{item.name}</Text>
                 <Text style={styles.productPrice}>Rp {item.basePrice.toLocaleString()} / {item.unitOfMeasure}</Text>
             </View>
-            <View style={styles.stockBadge}>
-                <Text style={styles.stockText}>{item.stockCount} in stock</Text>
+            <View style={styles.rightActions}>
+                <View style={styles.stockBadge}>
+                    <Text style={styles.stockText}>{item.stockCount} in stock</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/add-product', params: { productId: item.id } })} style={styles.editButton}>
+                    <Ionicons name="pencil" size={20} color="#64748b" />
+                </TouchableOpacity>
             </View>
           </View>
         )}
@@ -63,5 +68,7 @@ const styles = StyleSheet.create({
   productName: { fontSize: 18, fontWeight: '600', color: '#333' },
   productPrice: { fontSize: 14, color: '#777', marginTop: 4 },
   stockBadge: { backgroundColor: '#f0f9ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  stockText: { color: '#0284c7', fontWeight: '600', fontSize: 12 }
+  stockText: { color: '#0284c7', fontWeight: '600', fontSize: 12 },
+  rightActions: { flexDirection: 'row', alignItems: 'center' },
+  editButton: { marginLeft: 12, padding: 4 }
 });
