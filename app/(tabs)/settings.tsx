@@ -2,8 +2,8 @@ import { GoogleSignin, statusCodes, type User } from '@react-native-google-signi
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BLEPrinter } from 'react-native-thermal-receipt-printer';
 import { useTranslation } from '../../src/i18n/LanguageContext';
+import { BLEPrinterDirect, isNativeModuleAvailable } from '../../src/utils/BLEPrinterModule';
 import { BackupScheduler } from '../../src/utils/BackupScheduler';
 import { PrinterService } from '../../src/utils/PrinterService';
 import { SyncService } from '../../src/utils/SyncService';
@@ -173,10 +173,10 @@ export default function SettingsScreen() {
     setConnecting(true);
     try {
       // Guard: the native module won't exist in Expo Go
-      if (!BLEPrinter || typeof BLEPrinter.init !== 'function') {
+      if (!isNativeModuleAvailable()) {
         Alert.alert(
           'Native Module Missing',
-          'BLEPrinter is not available. You must run a custom dev client (npx expo run:android) — Expo Go does not support native BLE printing.'
+          'RNBLEPrinter native module is not loaded. This can happen in Expo Go or if the module failed to link. Please use a development build.'
         );
         return;
       }
@@ -186,17 +186,17 @@ export default function SettingsScreen() {
       if (!hasPermission) return;
 
       // init() must be called BEFORE closeConn() to ensure the internal native adapter exists!
-      await BLEPrinter.init();
+      await BLEPrinterDirect.init();
 
       // Always tear down any previous connection first.
       // The library caches internal BLE state — without this, reconnecting
       // after the printer goes offline will silently reuse the dead socket.
       try {
-        await BLEPrinter.closeConn();
+        await BLEPrinterDirect.closeConn();
       } catch {
         // No active connection to close — that's fine, continue.
       }
-      const devices = await BLEPrinter.getDeviceList();
+      const devices = await BLEPrinterDirect.getDeviceList();
       if (devices.length === 0) {
         setConnectedDevice(null);
         PrinterService.isPrinterConnected = false;
@@ -205,7 +205,7 @@ export default function SettingsScreen() {
       }
 
       const device = devices[0];
-      await BLEPrinter.connectPrinter(device.inner_mac_address);
+      await BLEPrinterDirect.connectPrinter(device.inner_mac_address);
 
       setConnectedDevice(device.device_name);
       PrinterService.isPrinterConnected = true;
@@ -214,7 +214,7 @@ export default function SettingsScreen() {
       const msg = e?.message || 'Unknown error';
       setConnectedDevice(null);
       PrinterService.isPrinterConnected = false;
-      Alert.alert('Connection Error', `${msg}\n\nMake sure you are on a physical device with a custom dev client (not Expo Go).`);
+      Alert.alert('Connection Error', `${msg}\n\nEnsure Bluetooth is enabled and the printer is paired in Android settings.`);
     } finally {
       setConnecting(false);
     }

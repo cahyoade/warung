@@ -1,5 +1,5 @@
-import { Alert, Platform, PermissionsAndroid } from 'react-native';
-import { BLEPrinter } from 'react-native-thermal-receipt-printer';
+import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { BLEPrinterDirect, isNativeModuleAvailable } from './BLEPrinterModule';
 
 // MPT-II (58mm) = 48mm printable width = 384 dots = 32 chars (Font A, 12x24)
 const LINE_WIDTH = 32;
@@ -143,11 +143,11 @@ export class PrinterService {
      */
     static async printReceipt(data: ReceiptData): Promise<boolean> {
         // Guard: native module may not exist in Expo Go
-        if (!BLEPrinter || typeof BLEPrinter.printBill !== 'function') {
-            console.warn('BLEPrinter native module is not available — skipping print.');
+        if (!isNativeModuleAvailable()) {
+            console.warn('RNBLEPrinter native module is not available — skipping print.');
             Alert.alert(
                 'Printer Unavailable',
-                'The BLE printing module is not loaded. Make sure you are running a custom dev client (npx expo run:android), not Expo Go.'
+                'The Bluetooth printing native module is not loaded. Make sure you are running a development build (not Expo Go).'
             );
             return false;
         }
@@ -157,16 +157,16 @@ export class PrinterService {
             const hasPermission = await this.requestPermissions();
             if (hasPermission) {
                 try {
-                    await BLEPrinter.init();
+                    await BLEPrinterDirect.init();
                     try {
-                        await BLEPrinter.closeConn();
+                        await BLEPrinterDirect.closeConn();
                     } catch {
                         // ignore
                     }
-                    const devices = await BLEPrinter.getDeviceList();
+                    const devices = await BLEPrinterDirect.getDeviceList();
                     if (devices && devices.length > 0) {
                         const device = devices[0];
-                        await BLEPrinter.connectPrinter(device.inner_mac_address);
+                        await BLEPrinterDirect.connectPrinter(device.inner_mac_address);
                         this.isPrinterConnected = true;
                     }
                 } catch (e) {
@@ -187,7 +187,7 @@ export class PrinterService {
         console.log('SENDING TO BLUETOOTH PRINTER:\n', receiptText);
 
         try {
-            await BLEPrinter.printBill(receiptText, { beep: false, cut: false });
+            await BLEPrinterDirect.printBill(receiptText, { beep: false, cut: false });
             return true;
         } catch (e: any) {
             const msg = e?.message || 'Unknown error';
