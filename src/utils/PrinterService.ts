@@ -1,4 +1,5 @@
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BLEPrinterDirect, isNativeModuleAvailable } from './BLEPrinterModule';
 
 // MPT-II (58mm) = 48mm printable width = 384 dots = 32 chars (Font A, 12x24)
@@ -188,9 +189,10 @@ export class PrinterService {
      * Attempt to automatically connect if not connected.
      */
     static async printReceipt(data: ReceiptData): Promise<boolean> {
+        console.log('[PrinterService] printReceipt called with transaction:', data.transactionId);
         // Guard: native module may not exist in Expo Go
         if (!isNativeModuleAvailable()) {
-            console.warn('RNBLEPrinter native module is not available — skipping print.');
+            console.warn('[PrinterService] RNBLEPrinter native module is not available — skipping print.');
             Alert.alert(
                 'Printer Unavailable',
                 'The Bluetooth printing native module is not loaded. Make sure you are running a development build (not Expo Go).'
@@ -199,28 +201,69 @@ export class PrinterService {
         }
 
         if (!this.isPrinterConnected) {
-            console.log('Attempting auto-connect...');
+            console.log('[PrinterService] Printer is not connected. Attempting auto-connect...');
             const hasPermission = await this.requestPermissions();
+            console.log('[PrinterService] Permission check result:', hasPermission);
             if (hasPermission) {
                 try {
+                    console.log('[PrinterService] Auto-connect: Initializing BLE adapter...');
                     await BLEPrinterDirect.init();
                     try {
+                        console.log('[PrinterService] Auto-connect: Tearing down existing connections...');
                         await BLEPrinterDirect.closeConn();
-                    } catch {
-                        // ignore
+                    } catch (closeErr) {
+                        console.log('[PrinterService] Auto-connect: closeConn error ignored:', closeErr);
                     }
+                    console.log('[PrinterService] Auto-connect: Fetching saved printer details...');
+                    const savedMac = await AsyncStorage.getItem('SELECTED_PRINTER_MAC');
+                    console.log('[PrinterService] Auto-connect: Saved MAC address is:', savedMac);
+
+                    console.log('[PrinterService] Auto-connect: Fetching paired device list...');
                     const devices = await BLEPrinterDirect.getDeviceList();
-                    if (devices && devices.length > 0) {
-                        const device = devices[0];
-                        await BLEPrinterDirect.connectPrinter(device.inner_mac_address);
+                    console.log(`[PrinterService] Auto-connect: Found ${devices?.length || 0} paired devices`);
+
+                    let targetDevice = null;
+                    if (savedMac && devices && devices.length > 0) {
+                        targetDevice = devices.find(d => d.inner_mac_address === savedMac);
+                        if (targetDevice) {
+                            console.log(`[PrinterService] Auto-connect: Found saved printer device: ${targetDevice.device_name}`);
+                        } else {
+                            console.warn('[PrinterService] Auto-connect: Saved printer MAC not in paired list. Searching by keywords.');
+                        }
+                    }
+
+                    if (!targetDevice && devices && devices.length > 0) {
+                        // If no saved MAC or saved MAC not found, check by common keywords:
+                        const printerKeywords = ['print', 'mpt', 'rpp', 'pos', 'thermal', 'spp', 'xp-', 'mtp', 'goojprt'];
+                        targetDevice = devices.find(d => {
+                            const name = (d.device_name || '').toLowerCase();
+                            return printerKeywords.some(keyword => name.includes(keyword));
+                        });
+
+                        if (targetDevice) {
+                            console.log(`[PrinterService] Auto-connect: Found printer by keyword match: ${targetDevice.device_name}`);
+                        } else {
+                            // Fallback to first device
+                            targetDevice = devices[0];
+                            console.log(`[PrinterService] Auto-connect: Fallback to first device in list: ${targetDevice.device_name}`);
+                        }
+                    }
+
+                    if (targetDevice) {
+                        console.log(`[PrinterService] Auto-connect: Attempting to connect to device ${targetDevice.device_name} (${targetDevice.inner_mac_address})`);
+                        await BLEPrinterDirect.connectPrinter(targetDevice.inner_mac_address);
                         this.isPrinterConnected = true;
+                        console.log('[PrinterService] Auto-connect successful!');
+                    } else {
+                        console.warn('[PrinterService] Auto-connect failed: No devices in paired list');
                     }
                 } catch (e) {
-                    console.warn('Auto connection failed', e);
+                    console.warn('[PrinterService] Auto connection failed with error:', e);
                 }
             }
 
             if (!this.isPrinterConnected) {
+                console.error('[PrinterService] Failed to print: No printer connected.');
                 Alert.alert(
                     'Printer Error',
                     'Could not connect to a printer. Please turn on your Bluetooth thermal printer and check the connection in the Settings screen.'
@@ -230,14 +273,15 @@ export class PrinterService {
         }
 
         const receiptText = this.buildReceiptFormat(data);
-        console.log('SENDING TO BLUETOOTH PRINTER:\n', receiptText);
+        console.log('[PrinterService] SENDING TO BLUETOOTH PRINTER:\n', receiptText);
 
         try {
             await BLEPrinterDirect.printBill(receiptText, { beep: false, cut: false });
+            console.log('[PrinterService] printBill successfully sent to native module');
             return true;
         } catch (e: any) {
             const msg = e?.message || 'Unknown error';
-            console.error('PrinterService.printReceipt failed:', msg);
+            console.error('[PrinterService] printReceipt failed with exception:', msg);
             Alert.alert(
                 'Printer Error',
                 `Failed to print receipt: ${msg}\n\nMake sure the printer is connected via the Settings screen first.`

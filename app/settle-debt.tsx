@@ -68,7 +68,7 @@ export default function SettleDebtScreen() {
     try {
       const settledAmount = Math.min(amount, totalDebt);
       let remainingPayment = settledAmount;
-      let pointsAwarded = Math.floor(settledAmount / 20000); // 1 point per 20k
+      let pointsAwarded = 0;
 
       await db.withTransactionAsync(async () => {
         // 1. Distribute payment across transactions
@@ -81,6 +81,11 @@ export default function SettleDebtScreen() {
           const newCashGiven = txn.cashGiven + applyToTxn;
           const newStatus = newCashGiven >= txn.totalAmount ? 'Paid' : 'Unpaid';
           
+          // Award points based on the full transaction amount for fully-paid transactions
+          if (newStatus === 'Paid') {
+            pointsAwarded += Math.floor(txn.totalAmount / 20000);
+          }
+
           await db.runAsync(
             'UPDATE "Transaction" SET cashGiven = ?, paymentStatus = ? WHERE id = ?',
             [newCashGiven, newStatus, txn.id]

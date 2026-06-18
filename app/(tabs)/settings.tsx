@@ -1,7 +1,8 @@
 import { GoogleSignin, statusCodes, type User } from '@react-native-google-signin/google-signin';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from '../../src/i18n/LanguageContext';
 import { BLEPrinterDirect, isNativeModuleAvailable } from '../../src/utils/BLEPrinterModule';
 import { BackupScheduler } from '../../src/utils/BackupScheduler';
@@ -22,6 +23,11 @@ export default function SettingsScreen() {
   const [userInfo, setUserInfo] = useState<User | null>(null);
   const [signingIn, setSigningIn] = useState(false);
 
+  // Printer-related states
+  const [devices, setDevices] = useState<any[]>([]);
+  const [devicePickerVisible, setDevicePickerVisible] = useState(false);
+  const [selectedMac, setSelectedMac] = useState<string | null>(null);
+
   useEffect(() => {
     GoogleSignin.configure({
       scopes: [
@@ -39,10 +45,25 @@ export default function SettingsScreen() {
     }
   }, []);
 
-  // Load auto-backup state
+  // Load auto-backup state and saved printer
   useEffect(() => {
     BackupScheduler.isEnabled().then(setAutoBackupEnabled);
     BackupScheduler.getLastBackupTime().then(setLastBackupTime);
+
+    const loadSavedPrinter = async () => {
+      try {
+        const savedMac = await AsyncStorage.getItem('SELECTED_PRINTER_MAC');
+        const savedName = await AsyncStorage.getItem('SELECTED_PRINTER_NAME');
+        if (savedMac && savedName) {
+          setSelectedMac(savedMac);
+          setConnectedDevice(savedName);
+          PrinterService.isPrinterConnected = true;
+        }
+      } catch (err) {
+        console.error('Error loading saved printer:', err);
+      }
+    };
+    loadSavedPrinter();
   }, []);
 
   const toggleAutoBackup = async () => {
@@ -118,10 +139,12 @@ export default function SettingsScreen() {
 
   const connectPrinter = async () => {
     if (connecting) return;
+    console.log('[SettingsScreen] connectPrinter called');
     setConnecting(true);
     try {
       // Guard: the native module won't exist in Expo Go
       if (!isNativeModuleAvailable()) {
+        console.warn('[SettingsScreen] Native module is missing');
         Alert.alert(
           'Native Module Missing',
           'RNBLEPrinter native module is not loaded. This can happen in Expo Go or if the module failed to link. Please use a development build.'
@@ -130,39 +153,73 @@ export default function SettingsScreen() {
       }
 
       // Request runtime Bluetooth permissions (required on Android 12+)
+      console.log('[SettingsScreen] Requesting Bluetooth permissions...');
       const hasPermission = await requestBluetoothPermissions();
-      if (!hasPermission) return;
+      console.log(`[SettingsScreen] Bluetooth permissions status: ${hasPermission}`);
+      if (!hasPermission) {
+        console.warn('[SettingsScreen] Bluetooth permission denied by user');
+        return;
+      }
 
       // init() must be called BEFORE closeConn() to ensure the internal native adapter exists!
+      console.log('[SettingsScreen] Calling BLEPrinterDirect.init()...');
       await BLEPrinterDirect.init();
 
       // Always tear down any previous connection first.
-      // The library caches internal BLE state — without this, reconnecting
-      // after the printer goes offline will silently reuse the dead socket.
+      console.log('[SettingsScreen] Closing existing connections if any...');
       try {
         await BLEPrinterDirect.closeConn();
-      } catch {
-        // No active connection to close — that's fine, continue.
+      } catch (closeErr) {
+        console.log('[SettingsScreen] closeConn warning:', closeErr);
       }
-      const devices = await BLEPrinterDirect.getDeviceList();
-      if (devices.length === 0) {
+
+      console.log('[SettingsScreen] Fetching device list from native...');
+      const pairedDevices = await BLEPrinterDirect.getDeviceList();
+      console.log('[SettingsScreen] Devices returned:', JSON.stringify(pairedDevices, null, 2));
+
+      if (pairedDevices.length === 0) {
+        console.warn('[SettingsScreen] No paired devices found');
         setConnectedDevice(null);
         PrinterService.isPrinterConnected = false;
         Alert.alert('No Devices', 'Try pairing in Android settings first.');
         return;
       }
 
-      const device = devices[0];
+      setDevices(pairedDevices);
+      setDevicePickerVisible(true);
+    } catch (e: any) {
+      const msg = e?.message || 'Unknown error';
+      console.error('[SettingsScreen] connectPrinter failed with error:', msg, e);
+      setConnectedDevice(null);
+      PrinterService.isPrinterConnected = false;
+      Alert.alert('Connection Error', `${msg}\n\nEnsure Bluetooth is enabled and the printer is paired in Android settings.`);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleSelectDevice = async (device: any) => {
+    setDevicePickerVisible(false);
+    setConnecting(true);
+    try {
+      console.log(`[SettingsScreen] Connecting to user-selected device: ${device.device_name} (${device.inner_mac_address})`);
       await BLEPrinterDirect.connectPrinter(device.inner_mac_address);
 
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('SELECTED_PRINTER_MAC', device.inner_mac_address);
+      await AsyncStorage.setItem('SELECTED_PRINTER_NAME', device.device_name);
+
+      console.log('[SettingsScreen] Connection succeeded!');
+      setSelectedMac(device.inner_mac_address);
       setConnectedDevice(device.device_name);
       PrinterService.isPrinterConnected = true;
       Alert.alert('Connected', `Ready to print on "${device.device_name}".`);
     } catch (e: any) {
       const msg = e?.message || 'Unknown error';
+      console.error('[SettingsScreen] connectPrinter to selected device failed with error:', msg, e);
       setConnectedDevice(null);
       PrinterService.isPrinterConnected = false;
-      Alert.alert('Connection Error', `${msg}\n\nEnsure Bluetooth is enabled and the printer is paired in Android settings.`);
+      Alert.alert('Connection Error', `${msg}\n\nEnsure the printer is turned on and paired.`);
     } finally {
       setConnecting(false);
     }
@@ -367,6 +424,62 @@ export default function SettingsScreen() {
               </ScrollView>
             )}
             <TouchableOpacity style={[styles.btnSync, { backgroundColor: '#64748b', marginTop: 10 }]} onPress={() => setRestoreModalVisible(false)}>
+              <Text style={styles.btnSyncText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Bluetooth Device Picker Modal */}
+      <Modal
+        visible={devicePickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDevicePickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.cardTitle}>Select Bluetooth Printer</Text>
+            <Text style={[styles.cardDesc, { marginBottom: 10 }]}>
+              Choose your thermal printer from the list of paired Bluetooth devices below:
+            </Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {devices.map((device) => {
+                const isSelected = selectedMac === device.inner_mac_address;
+                const isLikelyPrinter = (device.device_name || '').toLowerCase().includes('mpt') ||
+                                        (device.device_name || '').toLowerCase().includes('print') ||
+                                        (device.device_name || '').toLowerCase().includes('pos') ||
+                                        (device.device_name || '').toLowerCase().includes('thermal');
+                return (
+                  <TouchableOpacity
+                    key={device.inner_mac_address}
+                    style={[
+                      styles.backupItem,
+                      isSelected && { backgroundColor: '#f0fdf4', borderColor: '#10b981', borderWidth: 1 }
+                    ]}
+                    onPress={() => handleSelectDevice(device)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.backupItemName, isSelected && { color: '#10b981' }]}>
+                          {device.device_name || 'Unknown Device'}
+                        </Text>
+                        <Text style={styles.backupItemDate}>{device.inner_mac_address}</Text>
+                      </View>
+                      {isLikelyPrinter && (
+                        <View style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10, color: '#0369a1', fontWeight: 'bold' }}>PRINTER</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.btnSync, { backgroundColor: '#64748b', marginTop: 10 }]}
+              onPress={() => setDevicePickerVisible(false)}
+            >
               <Text style={styles.btnSyncText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
