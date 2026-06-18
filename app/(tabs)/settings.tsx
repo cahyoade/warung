@@ -10,62 +10,10 @@ import { PrinterService } from '../../src/utils/PrinterService';
 import { SyncService } from '../../src/utils/SyncService';
 
 /**
- * Request Bluetooth runtime permissions.
- * - Android 12+ (API 31+): BLUETOOTH_CONNECT + BLUETOOTH_SCAN
- * - Android 11 and below: ACCESS_FINE_LOCATION (required for BLE scanning)
- * Returns true if all required permissions were granted.
+ * Request Bluetooth runtime permissions via the shared PrinterService helper.
+ * Surfaces user-facing alerts on denial.
  */
-async function requestBluetoothPermissions(): Promise<boolean> {
-  if (Platform.OS !== 'android') return true;
-
-  try {
-    const apiLevel = Platform.Version;
-
-    if (typeof apiLevel === 'number' && apiLevel >= 31) {
-      // Android 12+
-      const results = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      ]);
-
-      const allGranted =
-        results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
-        results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
-
-      if (!allGranted) {
-        Alert.alert(
-          'Bluetooth Permission Required',
-          'This app needs Bluetooth permissions to connect to your thermal printer. Please grant the permission in your device settings.'
-        );
-      }
-      return allGranted;
-    } else {
-      // Android 11 and below — BLE scanning requires location permission
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Location Permission Required',
-          message: 'This app needs location access to scan for nearby Bluetooth printers.',
-          buttonPositive: 'Allow',
-          buttonNegative: 'Deny',
-        }
-      );
-
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        Alert.alert(
-          'Location Permission Required',
-          'Bluetooth scanning requires location permission on this Android version. Please grant it in your device settings.'
-        );
-        return false;
-      }
-      return true;
-    }
-  } catch (err) {
-    console.error('Permission request error:', err);
-    Alert.alert('Permission Error', 'Failed to request Bluetooth permissions.');
-    return false;
-  }
-}
+const requestBluetoothPermissions = () => PrinterService.requestPermissions({ showAlerts: true });
 
 /**
  * Determine if a Bluetooth device is likely a printer based on its Android Bluetooth Class

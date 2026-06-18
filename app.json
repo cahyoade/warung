@@ -50,7 +50,8 @@
         }
       ],
       "expo-sqlite",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "./plugins/withBluetoothPermissions.js"
     ],
     "experiments": {
       "typedRoutes": true,

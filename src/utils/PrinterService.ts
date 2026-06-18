@@ -66,8 +66,23 @@ function separator(char = '-'): string {
 export class PrinterService {
     static isPrinterConnected = false;
 
-    static async requestPermissions(): Promise<boolean> {
+    /**
+     * Request the runtime permissions needed to scan for and connect to a
+     * Bluetooth thermal printer.
+     *
+     * - Android 12+ (API 31+): BLUETOOTH_CONNECT + BLUETOOTH_SCAN are strictly
+     *   required. ACCESS_FINE_LOCATION is requested as a best-effort because
+     *   some Samsung BLE stacks still need it to return scan results, but we
+     *   do NOT fail if the user denies it — otherwise devices that don't need
+     *   location (e.g. Infinix) would be permanently blocked.
+     * - Android 11 and below: ACCESS_FINE_LOCATION is required for BLE scanning.
+     *
+     * Pass `{ showAlerts: true }` to surface user-facing alerts on denial.
+     */
+    static async requestPermissions(options: { showAlerts?: boolean } = {}): Promise<boolean> {
         if (Platform.OS !== 'android') return true;
+
+        const { showAlerts = false } = options;
 
         try {
             const apiLevel = Platform.Version;
@@ -77,21 +92,52 @@ export class PrinterService {
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                 ]);
 
-                return (
+                const allGranted =
                     results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED &&
-                    results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED
-                );
+                    results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
+
+                if (!allGranted && showAlerts) {
+                    Alert.alert(
+                        'Bluetooth Permission Required',
+                        'This app needs Bluetooth permissions to connect to your thermal printer. Please grant the permission in your device settings.'
+                    );
+                }
+                return allGranted;
             } else {
                 // Android 11 and below — BLE scanning requires location permission
-                const granted = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-                );
-                return granted === PermissionsAndroid.RESULTS.GRANTED;
+                const rationale = showAlerts
+                    ? {
+                          title: 'Location Permission Required',
+                          message: 'This app needs location access to scan for nearby Bluetooth printers.',
+                          buttonPositive: 'Allow',
+                          buttonNegative: 'Deny',
+                      }
+                    : undefined;
+                const granted = rationale
+                    ? await PermissionsAndroid.request(
+                          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                          rationale
+                      )
+                    : await PermissionsAndroid.request(
+                          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+                      );
+                const ok = granted === PermissionsAndroid.RESULTS.GRANTED;
+                if (!ok && showAlerts) {
+                    Alert.alert(
+                        'Location Permission Required',
+                        'Bluetooth scanning requires location permission on this Android version. Please grant it in your device settings.'
+                    );
+                }
+                return ok;
             }
         } catch (err) {
             console.error('Permission request error:', err);
+            if (showAlerts) {
+                Alert.alert('Permission Error', 'Failed to request Bluetooth permissions.');
+            }
             return false;
         }
     }
