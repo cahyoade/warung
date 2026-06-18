@@ -55,37 +55,75 @@ function billTo64Buffer(text: string, opts: any = {}): string {
  */
 export const BLEPrinterDirect = {
     init(): Promise<void> {
+        console.log('[BLEPrinterDirect] init() called');
         return new Promise((resolve, reject) => {
-            if (!RNBLEPrinter) return reject(new Error('RNBLEPrinter native module is not available'));
-            RNBLEPrinter.init(() => resolve(), (error: string) => reject(new Error(error)));
+            if (!RNBLEPrinter) {
+                console.error('[BLEPrinterDirect] init() failed: RNBLEPrinter native module is not available');
+                return reject(new Error('RNBLEPrinter native module is not available'));
+            }
+            RNBLEPrinter.init(
+                () => {
+                    console.log('[BLEPrinterDirect] init() success');
+                    resolve();
+                },
+                (error: string) => {
+                    console.error('[BLEPrinterDirect] init() error from native:', error);
+                    reject(new Error(error));
+                }
+            );
         });
     },
 
     getDeviceList(): Promise<any[]> {
+        console.log('[BLEPrinterDirect] getDeviceList() called');
         return new Promise((resolve, reject) => {
-            if (!RNBLEPrinter) return reject(new Error('RNBLEPrinter native module is not available'));
+            if (!RNBLEPrinter) {
+                console.error('[BLEPrinterDirect] getDeviceList() failed: RNBLEPrinter native module is not available');
+                return reject(new Error('RNBLEPrinter native module is not available'));
+            }
             RNBLEPrinter.getDeviceList(
-                (printers: any[]) => resolve(printers),
-                (error: string) => reject(new Error(error)),
+                (printers: any[]) => {
+                    console.log('[BLEPrinterDirect] getDeviceList() success, found devices:', printers);
+                    resolve(printers);
+                },
+                (error: string) => {
+                    console.error('[BLEPrinterDirect] getDeviceList() error from native:', error);
+                    reject(new Error(error));
+                },
             );
         });
     },
 
     connectPrinter(innerMacAddress: string): Promise<any> {
+        console.log(`[BLEPrinterDirect] connectPrinter() called with MAC: ${innerMacAddress}`);
         return new Promise((resolve, reject) => {
-            if (!RNBLEPrinter) return reject(new Error('RNBLEPrinter native module is not available'));
+            if (!RNBLEPrinter) {
+                console.error('[BLEPrinterDirect] connectPrinter() failed: RNBLEPrinter native module is not available');
+                return reject(new Error('RNBLEPrinter native module is not available'));
+            }
             RNBLEPrinter.connectPrinter(
                 innerMacAddress,
-                (printer: any) => resolve(printer),
-                (error: string) => reject(new Error(error)),
+                (printer: any) => {
+                    console.log('[BLEPrinterDirect] connectPrinter() success, printer:', printer);
+                    resolve(printer);
+                },
+                (error: string) => {
+                    console.error(`[BLEPrinterDirect] connectPrinter() error from native for MAC ${innerMacAddress}:`, error);
+                    reject(new Error(error));
+                },
             );
         });
     },
 
     closeConn(): Promise<void> {
+        console.log('[BLEPrinterDirect] closeConn() called');
         return new Promise((resolve) => {
-            if (!RNBLEPrinter) return resolve();
+            if (!RNBLEPrinter) {
+                console.log('[BLEPrinterDirect] closeConn(): native module not available, resolving immediately');
+                return resolve();
+            }
             RNBLEPrinter.closeConn();
+            console.log('[BLEPrinterDirect] closeConn() completed');
             resolve();
         });
     },
