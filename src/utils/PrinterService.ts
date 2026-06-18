@@ -5,6 +5,26 @@ import { BLEPrinterDirect, isNativeModuleAvailable } from './BLEPrinterModule';
 // MPT-II (58mm) = 48mm printable width = 384 dots = 32 chars (Font A, 12x24)
 const LINE_WIDTH = 32;
 
+/**
+ * Determine if a Bluetooth device is likely a printer based on its Android Bluetooth Class
+ * and a fallback check on the device name.
+ */
+function isDevicePrinter(device: any): boolean {
+    // Check Bluetooth Class:
+    // Major 1536 is IMAGING
+    // Device 1664 is IMAGING_PRINTER, 1776 is IMAGING_PRINTER_SCANNER
+    const isPrinterClass =
+        device.major_class === 1536 &&
+        (device.device_class === 1664 || device.device_class === 1776);
+
+    if (isPrinterClass) return true;
+
+    // Fallback to name keyword check for misclassified printer devices
+    const name = (device.device_name || '').toLowerCase();
+    const printerKeywords = ['print', 'mpt', 'rpp', 'pos', 'thermal', 'spp', 'xp-', 'mtp', 'goojprt'];
+    return printerKeywords.some(keyword => name.includes(keyword));
+}
+
 export type ReceiptData = {
     transactionId: number;
     items: { name: string; qty: number; subtotal: number }[];
@@ -187,17 +207,13 @@ export class PrinterService {
                     }
 
                     if (!targetDevice && devices && devices.length > 0) {
-                        // If no saved MAC or saved MAC not found, check by common keywords:
-                        const printerKeywords = ['print', 'mpt', 'rpp', 'pos', 'thermal', 'spp', 'xp-', 'mtp', 'goojprt'];
-                        targetDevice = devices.find(d => {
-                            const name = (d.device_name || '').toLowerCase();
-                            return printerKeywords.some(keyword => name.includes(keyword));
-                        });
+                        // Try finding device using Bluetooth class or keyword matching
+                        targetDevice = devices.find(d => isDevicePrinter(d));
 
                         if (targetDevice) {
-                            console.log(`[PrinterService] Auto-connect: Found printer by keyword match: ${targetDevice.device_name}`);
+                            console.log(`[PrinterService] Auto-connect: Found printer by Bluetooth Class/Keyword matching: ${targetDevice.device_name}`);
                         } else {
-                            // Fallback to first device
+                            // Fallback to first device in list
                             targetDevice = devices[0];
                             console.log(`[PrinterService] Auto-connect: Fallback to first device in list: ${targetDevice.device_name}`);
                         }

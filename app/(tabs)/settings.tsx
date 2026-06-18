@@ -67,6 +67,26 @@ async function requestBluetoothPermissions(): Promise<boolean> {
   }
 }
 
+/**
+ * Determine if a Bluetooth device is likely a printer based on its Android Bluetooth Class
+ * and a fallback check on the device name.
+ */
+function isDevicePrinter(device: any): boolean {
+  // Check Bluetooth Class:
+  // Major 1536 is IMAGING
+  // Device 1664 is IMAGING_PRINTER, 1776 is IMAGING_PRINTER_SCANNER
+  const isPrinterClass =
+    device.major_class === 1536 &&
+    (device.device_class === 1664 || device.device_class === 1776);
+
+  if (isPrinterClass) return true;
+
+  // Fallback to name keyword check for misclassified printer devices
+  const name = (device.device_name || '').toLowerCase();
+  const printerKeywords = ['print', 'mpt', 'rpp', 'pos', 'thermal', 'spp', 'xp-', 'mtp', 'goojprt'];
+  return printerKeywords.some(keyword => name.includes(keyword));
+}
+
 const HEARTBEAT_INTERVAL_MS = 8000; // ping printer every 8 seconds
 
 export default function SettingsScreen() {
@@ -498,10 +518,7 @@ export default function SettingsScreen() {
             <ScrollView style={{ maxHeight: 300 }}>
               {devices.map((device) => {
                 const isSelected = selectedMac === device.inner_mac_address;
-                const isLikelyPrinter = (device.device_name || '').toLowerCase().includes('mpt') ||
-                                        (device.device_name || '').toLowerCase().includes('print') ||
-                                        (device.device_name || '').toLowerCase().includes('pos') ||
-                                        (device.device_name || '').toLowerCase().includes('thermal');
+                const isLikelyPrinter = isDevicePrinter(device);
                 return (
                   <TouchableOpacity
                     key={device.inner_mac_address}
